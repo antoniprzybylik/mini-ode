@@ -112,6 +112,33 @@ fn solve_implicit_euler(
 }
 
 #[pyfunction]
+fn solve_glrk4(
+    py: Python,
+    f: PyObject,
+    x_span: PyTensor,
+    y0: PyTensor,
+    step: PyTensor,
+    optimizer: &PyOptimizer,
+) -> PyResult<(PyTensor, PyTensor)> {
+    let f_module = convert_function(py, f)?;
+    let x_span_inner = x_span.0.copy();
+    let y0_inner = y0.0.copy();
+    let step_inner = step.0.copy();
+
+    py.allow_threads(|| {
+        mini_ode::solve_glrk4(
+            f_module,
+            x_span_inner,
+            y0_inner,
+            step_inner,
+            optimizer.0.as_ref(),
+        )
+        .map(|(x, y)| (PyTensor(x), PyTensor(y)))
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    })
+}
+
+#[pyfunction]
 fn solve_rkf45(
     py: Python,
     f: PyObject,
@@ -161,6 +188,7 @@ fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(solve_euler, m)?)?;
     m.add_function(wrap_pyfunction!(solve_rk4, m)?)?;
     m.add_function(wrap_pyfunction!(solve_implicit_euler, m)?)?;
+    m.add_function(wrap_pyfunction!(solve_glrk4, m)?)?;
     m.add_function(wrap_pyfunction!(solve_rkf45, m)?)?;
     m.add_function(wrap_pyfunction!(solve_row1, m)?)?;
     m.add_function(wrap_pyfunction!(CG, m)?)?;

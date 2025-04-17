@@ -36,7 +36,7 @@ pub fn solve_euler(
 
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
-        let remaining = &x_end - &x;
+        let remaining = &x_end - &x.squeeze();
         if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
             current_step = remaining.copy();
         }
@@ -80,7 +80,7 @@ pub fn solve_rk4(
 
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
-        let remaining = &x_end - &x;
+        let remaining = &x_end - &x.squeeze();
         if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
             current_step = remaining.copy();
         }
@@ -171,6 +171,98 @@ pub fn solve_implicit_euler(
     Ok((Tensor::cat(&all_x, 0), Tensor::cat(&all_y, 0)))
 }
 
+/// Solves ODE using Gauss-Legendre-Runge-Kutta 4th order method
+pub fn solve_glrk4(
+    f: tch::CModule,
+    x_span: Tensor,
+    y0: Tensor,
+    step: Tensor,
+    optimizer: &dyn Optimizer,
+) -> anyhow::Result<(Tensor, Tensor)> {
+    if x_span.size() != [2] {
+        return Err(anyhow!("x_span must be of shape [2]"));
+    }
+    if y0.size().len() != 1 {
+        return Err(anyhow!("y0 must be a one-dimensional tensor"));
+    }
+    if step.size().len() != 0 {
+        return Err(anyhow!("step must be a zero-dimensional tensor"));
+    }
+
+    let x_start = x_span.i(0);
+    let x_end = x_span.i(1);
+
+    let mut x = x_start.unsqueeze(0);
+    let mut y = y0.unsqueeze(0);
+
+    let mut all_x = vec![x.copy()];
+    let mut all_y = vec![y.copy()];
+
+    let mut current_step = step;
+    while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
+        let remaining = &x_end - &x.squeeze();
+        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+            current_step = remaining.copy();
+        }
+
+        let k = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
+
+        const c1: f64 = 0.2113248654f64;
+        const c2: f64 = 0.7886751346f64;
+        const a11: f64 = 0.25;
+        const a12: f64 = -0.03867513459f64;
+        const a21: f64 = 0.5386751346f64;
+        const a22: f64 = 0.25;
+
+        let first_k1k2_guess = Tensor::cat(
+            &[
+                f.forward_ts(&[
+                    &x.squeeze() + c1 * &current_step,
+                    &y.squeeze() + c1 * &current_step * &k,
+                ])?,
+                f.forward_ts(&[
+                    &x.squeeze() + c2 * &current_step,
+                    &y.squeeze() + c2 * &current_step * &k,
+                ])?,
+            ],
+            0,
+        );
+        let k1k2 = optimizer.optimize(
+            &|k1k2_guess| {
+                let diff1 = k1k2_guess.i((0..=1,))
+                    - f.forward_ts(&[
+                        &x.squeeze() + c1 * &current_step,
+                        &y.squeeze()
+                            + (a11 * k1k2_guess.i((0..=1)) + a12 * k1k2_guess.i((2..=3)))
+                                * &current_step,
+                    ])
+                    .unwrap();
+                let diff2 = k1k2_guess.i((2..=3))
+                    - f.forward_ts(&[
+                        &x.squeeze() + c2 * &current_step,
+                        &y.squeeze()
+                            + (a21 * k1k2_guess.i((0..=1)) + a22 * k1k2_guess.i((2..=3)))
+                                * &current_step,
+                    ])
+                    .unwrap();
+
+                diff1.dot(&diff1) + diff2.dot(&diff2)
+            },
+            &first_k1k2_guess,
+        );
+        assert!(k1k2.size().len() == 1);
+        assert!(k1k2.size()[0] == 4);
+
+        x = &x + &current_step;
+        y = &y + &current_step * (0.5 * k1k2.i((0..=1)) + 0.5 * k1k2.i((2..=3)));
+
+        all_x.push(x.copy());
+        all_y.push(y.copy());
+    }
+
+    Ok((Tensor::cat(&all_x, 0), Tensor::cat(&all_y, 0)))
+}
+
 /// Solves ODE using Runge-Kutta-Fehlberg 45 adaptive method
 pub fn solve_rkf45(
     f: tch::CModule,
@@ -204,7 +296,7 @@ pub fn solve_rkf45(
     let safety_factor_tensor = Tensor::from(safety_factor);
 
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
-        let remaining = &x_end - &x;
+        let remaining = &x_end - &x.squeeze();
         if remaining.lt_tensor(&step) == Tensor::from_slice(&[true]) {
             step = remaining.copy();
         }
@@ -323,7 +415,7 @@ pub fn solve_row1(
     let mut all_y = vec![y.copy()];
 
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
-        let remaining = &x_end - &x;
+        let remaining = &x_end - &x.squeeze();
         let mut current_step = step.copy();
         if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
             current_step = remaining.copy();
