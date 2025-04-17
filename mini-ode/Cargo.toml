@@ -1,0 +1,16 @@
+[package]
+name = "mini-ode"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+readme.workspace = true
+
+[dependencies]
+tch = "0.19.0"
+anyhow = "1.0.97"
+
+[lints]
+workspace = true

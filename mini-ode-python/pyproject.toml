@@ -1,0 +1,37 @@
+[project]
+name = "mini_ode"
+requires-python = ">= 3.9"
+authors = [
+    { name = "Antoni Przybylik", email = "antoni.przybylik@wp.pl" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Mathematics"
+]
+keywords = ["simulation", "math"]
+dynamic = ["description", "license", "readme", "version"]
+dependencies = [
+    "torch==2.6.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/antoniprzybylik/mini-ode"
+Source = "https://github.com/antoniprzybylik/mini-ode"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "py_src"
+module-name = "mini_ode.rust"
+bindings = "pyo3"
+features = ["pyo3/extension-module"]

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+	"mini-ode",
+	"mini-ode-python"
+]
+
+[workspace.package]
+version = "0.0.1"
+authors = ["Antoni Przybylik <antoni.przybylik@wp.pl>"]
+license = "GPL-2.0"
+repository = "https://github.com/antoniprzybylik/mini-ode"
+description = "A minimalistic ODE solvers library built on top of PyTorch"
+readme = "README.md"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+except_used = "warn"
+
+[profile.release]
+lto = true
