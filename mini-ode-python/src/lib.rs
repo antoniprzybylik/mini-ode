@@ -6,8 +6,8 @@ use std::io::Cursor;
 #[pyclass(module = "rust.optimizers", name = "Optimizer")]
 struct PyOptimizer(Box<dyn Optimizer + Send + Sync>);
 
-#[pyfunction]
-fn CG(
+#[pyfunction(name = "CG")]
+fn create_cg(
     max_steps: usize,
     gtol: Option<f64>,
     ftol: Option<f64>,
@@ -21,8 +21,8 @@ fn CG(
     )))
 }
 
-#[pyfunction]
-fn BFGS(
+#[pyfunction(name = "BFGS")]
+fn create_bfgs(
     max_steps: usize,
     gtol: Option<f64>,
     ftol: Option<f64>,
@@ -37,10 +37,10 @@ fn BFGS(
 }
 
 fn convert_function(py: Python, f: PyObject) -> PyResult<tch::CModule> {
-    let torch = py.import("torch")?;
+    let torch = py.import_bound("torch")?;
     let script_function_type = torch.getattr("jit")?.getattr("ScriptFunction")?;
 
-    if !f.as_ref(py).is_instance(script_function_type)? {
+    if !f.bind(py).is_instance(&script_function_type)? {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "Function must be a torch.jit.ScriptFunction",
         ));
@@ -190,8 +190,8 @@ fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(solve_glrk4, m)?)?;
     m.add_function(wrap_pyfunction!(solve_rkf45, m)?)?;
     m.add_function(wrap_pyfunction!(solve_row1, m)?)?;
-    m.add_function(wrap_pyfunction!(CG, m)?)?;
-    m.add_function(wrap_pyfunction!(BFGS, m)?)?;
+    m.add_function(wrap_pyfunction!(create_cg, m)?)?;
+    m.add_function(wrap_pyfunction!(create_bfgs, m)?)?;
     m.add_class::<PyOptimizer>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
