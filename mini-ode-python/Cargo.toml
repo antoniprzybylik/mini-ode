@@ -1,6 +1,6 @@
 [package]
 name = "mini-ode-python"
-edition = "2024"
+edition = "2021"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
