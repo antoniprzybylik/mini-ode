@@ -1,6 +1,6 @@
 [project]
 name = "mini_ode"
-requires-python = ">= 3.9"
+requires-python = ">= 3.12"
 authors = [
     { name = "Antoni Przybylik", email = "antoni.przybylik@wp.pl" }
 ]
