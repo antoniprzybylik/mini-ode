@@ -1,10 +1,17 @@
+//! Nonlinear optimization algorithms which are required by some ODE solvers
+//!
+//! The user may create objects containing optimizer configuration and pass it to ODE solver.
+
+use anyhow::anyhow;
 use tch::Tensor;
 
+/// Optimizer interface common for any optimizer in the library
 pub trait Optimizer {
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> Tensor;
+    /// Solves the problem of optimization of function `function` starting from point `x0`
+    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor>;
 }
 
-/// Broyden-Fletcher-Goldfarb-Shanno optimizer
+/// Broyden-Fletcher-Goldfarb-Shanno optimization algorithm
 pub struct BFGS {
     // Maximum number of optimization steps
     max_steps: usize,
@@ -16,7 +23,7 @@ pub struct BFGS {
     linesearch_atol: f64,
 }
 
-/// Conjugate Gradient optimizer
+/// Conjugate Gradient optimization algorithm
 pub struct CG {
     // Maximum number of optimization steps
     max_steps: usize,
@@ -105,8 +112,11 @@ impl CG {
 }
 
 impl Optimizer for CG {
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> Tensor {
-        assert!(x0.size().len() == 1);
+    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor> {
+        // Ensure that rank of the initital guess tensor is 1
+        if x0.size().len() != 1 {
+            return Err(anyhow!("`x0` must have rank 1"));
+        }
 
         let iters_to_reset = x0.size().len();
         let mut prev_grad = Tensor::zeros_like(&x0);
@@ -120,7 +130,7 @@ impl Optimizer for CG {
             // Stop if gradient is smaller than `gtol`
             if let Some(gtol) = self.gtol {
                 if grad.norm().double_value(&[]) < gtol {
-                    return x;
+                    return Ok(x);
                 }
             }
 
@@ -145,7 +155,7 @@ impl Optimizer for CG {
             let y = function(&x);
             if let (Some(prev_y), Some(ftol)) = (prev_y, self.ftol) {
                 if (&prev_y - &y).double_value(&[]) < ftol {
-                    return x;
+                    return Ok(x);
                 }
             }
             prev_y = Some(y);
@@ -155,7 +165,7 @@ impl Optimizer for CG {
             prev_direction = direction;
         }
 
-        x
+        Ok(x)
     }
 }
 
@@ -180,37 +190,49 @@ impl BFGS {
 }
 
 impl Optimizer for BFGS {
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> Tensor {
-        assert!(x0.size().len() == 1);
+    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor> {
+        // Ensure that rank of the initital guess tensor is 1
+        if x0.size().len() != 1 {
+            return Err(anyhow!("`x0` must have rank 1"));
+        }
 
+        // Determine the device and kind for use in the function
         let kind = x0.kind();
         let device = x0.device();
-        let identity = Tensor::eye(x0.size()[0], (kind, device));
 
+        let identity = Tensor::eye(x0.size()[0], (kind, device));
         let mut x = x0.copy();
         let mut appr_inv_h = identity.copy();
         let mut curr_grad = differentiate(function, &x);
         let mut curr_y = function(&x);
 
+        // Ensure that output of `function` is a scalar
+        if curr_y.size() != Vec::<i64>::new() {
+            return Err(anyhow!("Output of function `function` must be scalar"));
+        }
+
         for _ in 0..self.max_steps {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
                 if curr_grad.norm().double_value(&[]) < gtol {
-                    return x;
+                    return Ok(x);
                 }
             }
 
+            // Calculate step direction base on the gradient and approximate hessian
             let direction = (-appr_inv_h.mm(&curr_grad.unsqueeze(1))).squeeze();
 
+            // Choose optimal step in given direction using line search
             let step = choose_step(&x, &direction, function, self.linesearch_atol);
 
+            // Apply step
             x = x + &step;
 
             // Check for stop contition
             let y = function(&x);
             if let Some(ftol) = self.ftol {
                 if (curr_y.double_value(&[]) - y.double_value(&[])) < ftol {
-                    return x;
+                    return Ok(x);
                 }
             }
             curr_y = y;
@@ -263,6 +285,6 @@ impl Optimizer for BFGS {
             curr_grad = grad;
         }
 
-        x
+        Ok(x)
     }
 }

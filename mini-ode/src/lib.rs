@@ -155,7 +155,9 @@ pub fn solve_implicit_euler(
             },
             &(&y_prev.detach().squeeze()
                 + &current_step * f.forward_ts(&[&x.squeeze(), &y_prev.squeeze()])?),
-        );
+        ).map_err( |err| {
+            anyhow!(format!("Optimizer failed with: {}", err))
+        })?;
 
         y = y_next.unsqueeze(0);
         x = x_next.copy();
@@ -245,7 +247,9 @@ pub fn solve_glrk4(
                 diff1.dot(&diff1) + diff2.dot(&diff2)
             },
             &first_k1k2_guess,
-        );
+        ).map_err( |err| {
+            anyhow!(format!("Optimizer failed with: {}", err))
+        })?;
         assert!(k1k2.size().len() == 1);
         assert!(k1k2.size()[0] == 4);
 
