@@ -2,11 +2,7 @@ use anyhow::anyhow;
 use tch::IndexOp;
 use tch::Tensor;
 
-mod optimizers;
-
-pub use optimizers::BFGS;
-pub use optimizers::CG;
-pub use optimizers::Optimizer;
+pub mod optimizers;
 
 /// Solves ODE using Euler method
 pub fn solve_euler(
@@ -118,7 +114,7 @@ pub fn solve_implicit_euler(
     x_span: Tensor,
     y0: Tensor,
     step: Tensor,
-    optimizer: &dyn Optimizer,
+    optimizer: &dyn optimizers::Optimizer,
 ) -> anyhow::Result<(Tensor, Tensor)> {
     if x_span.size() != [2] {
         return Err(anyhow!("x_span must be of shape [2]"));
@@ -177,7 +173,7 @@ pub fn solve_glrk4(
     x_span: Tensor,
     y0: Tensor,
     step: Tensor,
-    optimizer: &dyn Optimizer,
+    optimizer: &dyn optimizers::Optimizer,
 ) -> anyhow::Result<(Tensor, Tensor)> {
     if x_span.size() != [2] {
         return Err(anyhow!("x_span must be of shape [2]"));
@@ -207,41 +203,41 @@ pub fn solve_glrk4(
 
         let k = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
 
-        const c1: f64 = 0.2113248654f64;
-        const c2: f64 = 0.7886751346f64;
-        const a11: f64 = 0.25;
-        const a12: f64 = -0.03867513459f64;
-        const a21: f64 = 0.5386751346f64;
-        const a22: f64 = 0.25;
+        const C1: f64 = 0.2113248654f64;
+        const C2: f64 = 0.7886751346f64;
+        const A11: f64 = 0.25;
+        const A12: f64 = -0.03867513459f64;
+        const A21: f64 = 0.5386751346f64;
+        const A22: f64 = 0.25;
 
         let first_k1k2_guess = Tensor::cat(
             &[
                 f.forward_ts(&[
-                    &x.squeeze() + c1 * &current_step,
-                    &y.squeeze() + c1 * &current_step * &k,
+                    &x.squeeze() + C1 * &current_step,
+                    &y.squeeze() + C1 * &current_step * &k,
                 ])?,
                 f.forward_ts(&[
-                    &x.squeeze() + c2 * &current_step,
-                    &y.squeeze() + c2 * &current_step * &k,
+                    &x.squeeze() + C2 * &current_step,
+                    &y.squeeze() + C2 * &current_step * &k,
                 ])?,
             ],
             0,
         );
         let k1k2 = optimizer.optimize(
             &|k1k2_guess| {
-                let diff1 = k1k2_guess.i((0..=1,))
+                let diff1 = k1k2_guess.i(0..=1)
                     - f.forward_ts(&[
-                        &x.squeeze() + c1 * &current_step,
+                        &x.squeeze() + C1 * &current_step,
                         &y.squeeze()
-                            + (a11 * k1k2_guess.i((0..=1)) + a12 * k1k2_guess.i((2..=3)))
+                            + (A11 * k1k2_guess.i(0..=1) + A12 * k1k2_guess.i(2..=3))
                                 * &current_step,
                     ])
                     .unwrap();
-                let diff2 = k1k2_guess.i((2..=3))
+                let diff2 = k1k2_guess.i(2..=3)
                     - f.forward_ts(&[
-                        &x.squeeze() + c2 * &current_step,
+                        &x.squeeze() + C2 * &current_step,
                         &y.squeeze()
-                            + (a21 * k1k2_guess.i((0..=1)) + a22 * k1k2_guess.i((2..=3)))
+                            + (A21 * k1k2_guess.i(0..=1) + A22 * k1k2_guess.i(2..=3))
                                 * &current_step,
                     ])
                     .unwrap();
@@ -254,7 +250,7 @@ pub fn solve_glrk4(
         assert!(k1k2.size()[0] == 4);
 
         x = &x + &current_step;
-        y = &y + &current_step * (0.5 * k1k2.i((0..=1)) + 0.5 * k1k2.i((2..=3)));
+        y = &y + &current_step * (0.5 * k1k2.i(0..=1) + 0.5 * k1k2.i(2..=3));
 
         all_x.push(x.copy());
         all_y.push(y.copy());
