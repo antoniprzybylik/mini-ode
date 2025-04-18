@@ -1,6 +1,5 @@
-use mini_ode::Optimizer;
+use mini_ode::optimizers::Optimizer;
 use pyo3::prelude::*;
-use pyo3::types::PyType;
 use pyo3_tch::PyTensor;
 use std::io::Cursor;
 
@@ -14,7 +13,7 @@ fn CG(
     ftol: Option<f64>,
     linesearch_atol: Option<f64>,
 ) -> PyOptimizer {
-    PyOptimizer(Box::new(mini_ode::CG::new(
+    PyOptimizer(Box::new(mini_ode::optimizers::CG::new(
         max_steps,
         gtol,
         ftol,
@@ -29,7 +28,7 @@ fn BFGS(
     ftol: Option<f64>,
     linesearch_atol: Option<f64>,
 ) -> PyOptimizer {
-    PyOptimizer(Box::new(mini_ode::BFGS::new(
+    PyOptimizer(Box::new(mini_ode::optimizers::BFGS::new(
         max_steps,
         gtol,
         ftol,
