@@ -33,7 +33,7 @@ pub fn solve_euler(
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
-        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&current_step) == Tensor::from(true) {
             current_step = remaining.copy();
         }
 
@@ -77,7 +77,7 @@ pub fn solve_rk4(
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
-        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&current_step) == Tensor::from(true) {
             current_step = remaining.copy();
         }
 
@@ -138,7 +138,7 @@ pub fn solve_implicit_euler(
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
-        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&current_step) == Tensor::from(true) {
             current_step = remaining.copy();
         }
 
@@ -199,7 +199,7 @@ pub fn solve_glrk4(
     let mut current_step = step;
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
-        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&current_step) == Tensor::from(true) {
             current_step = remaining.copy();
         }
 
@@ -297,7 +297,7 @@ pub fn solve_rkf45(
 
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
-        if remaining.lt_tensor(&step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&step) == Tensor::from(true) {
             step = remaining.copy();
         }
 
@@ -417,7 +417,7 @@ pub fn solve_row1(
     while x.lt_tensor(&x_end) == Tensor::from_slice(&[true]) {
         let remaining = &x_end - &x.squeeze();
         let mut current_step = step.copy();
-        if remaining.lt_tensor(&current_step) == Tensor::from_slice(&[true]) {
+        if remaining.lt_tensor(&current_step) == Tensor::from(true) {
             current_step = remaining.copy();
         }
 
