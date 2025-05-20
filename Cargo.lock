@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "mini-ode"
-version = "0.0.1"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "tch",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "mini-ode-python"
-version = "0.0.1"
+version = "0.0.3"
 dependencies = [
  "mini-ode",
  "pyo3",
