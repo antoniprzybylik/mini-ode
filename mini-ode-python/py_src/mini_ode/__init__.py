@@ -1,10 +1,11 @@
 import torch
 from .rust import __version__
-from .rust import solve_euler
-from .rust import solve_rk4
-from .rust import solve_rkf45
-from .rust import solve_implicit_euler
-from .rust import solve_glrk4
-from .rust import solve_row1
+from .rust import EulerMethodSolver
+from .rust import RK4MethodSolver
+from .rust import RKF45MethodSolver
+from .rust import ImplicitEulerMethodSolver
+from .rust import GLRK4MethodSolver
+from .rust import ROW1MethodSolver
+from .rust import Solver
 
 from . import optimizers

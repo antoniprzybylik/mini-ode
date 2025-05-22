@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use tch::Tensor;
 
 /// Optimizer interface common for any optimizer in the library
-pub trait Optimizer {
+pub trait Optimizer: Send + Sync {
     /// Solves the problem of optimization of function `function` starting from point `x0`
     fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor>;
 }
