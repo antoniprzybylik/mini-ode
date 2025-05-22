@@ -98,8 +98,8 @@ use tch::{Tensor, CModule};
 fn main() -> anyhow::Result<()> {
     let solver = Solver::Euler { step: 0.01 };
     let model = CModule::load("my_traced_function.pt")?;
-    let x_span = Tensor::of_slice(&[0.0f64, 2.0]);
-    let y0 = Tensor::of_slice(&[1.0f64, 0.0]);
+    let x_span = Tensor::from_slice(&[0.0f64, 2.0]);
+    let y0 = Tensor::from_slice(&[1.0f64, 0.0]);
 
     let (xs, ys) = solver.solve(model, x_span, y0)?;
     println!("{:?}", xs);
