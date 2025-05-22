@@ -91,6 +91,10 @@ solver = mini_ode.GLRK4MethodSolver(step=0.2, optimizer=optimizer)
 
 In Rust, solvers use the same logic as in Python - but you pass in a `tch::CModule` representing the TorchScripted derivative function.
 
+**Example 1:** Load a TorchScript model from file
+
+This approach uses a model traced in Python (e.g., with `torch.jit.trace`) and saved to disk.
+
 ```rust
 use mini_ode::Solver;
 use tch::{Tensor, CModule};
@@ -103,6 +107,50 @@ fn main() -> anyhow::Result<()> {
 
     let (xs, ys) = solver.solve(model, x_span, y0)?;
     println!("{:?}", xs);
+    Ok(())
+}
+```
+
+**Example 2:** Trace the derivative function directly in Rust
+
+You can also define and trace the derivative function in Rust using `CModule::create_by_tracing`.
+
+```rust
+use mini_ode::Solver;
+use tch::{Tensor, CModule};
+
+fn main() -> anyhow::Result<()> {
+    // Initial value for tracing
+    let y0 = Tensor::from_slice(&[1.0f64, 0.0]);
+
+    // Define the derivative function closure
+    let mut closure = |inputs: &[Tensor]| {
+        let x = &inputs[0];
+        let y = &inputs[1];
+        let flipped = y.flip(0);
+        let dy = &flipped - &(&flipped.pow_tensor_scalar(3.0) * Tensor::from_slice(&[0.0, 1.0]));
+        vec![dy]
+    };
+
+    // Trace the model directly in Rust
+    let model = CModule::create_by_tracing(
+        "ode_fn",
+        "forward",
+        &[Tensor::from(0.0), y0.shallow_clone()],
+        &mut closure,
+    )?;
+
+    // Use an adaptive solver, for example
+    let solver = Solver::RKF45 {
+        rtol: 0.00001,
+        atol: 0.00001,
+        min_step: 1e-9,
+        safety_factor: 0.9
+    };
+    let x_span = Tensor::from_slice(&[0.0f64, 5.0]);
+
+    let (xs, ys) = solver.solve(model, x_span, y0)?;
+    println!("Final state: {:?}", ys);
     Ok(())
 }
 ```
