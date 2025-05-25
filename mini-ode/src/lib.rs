@@ -75,6 +75,11 @@ fn solve_euler(
         }
 
         let dy = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
+        let dy_rank = dy.size().len();
+        if dy_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", dy_rank);
+        }
+        
         y = &y + current_step * &dy;
         x = &x + current_step;
 
@@ -109,18 +114,34 @@ fn solve_rk4(
         }
 
         let k1 = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
+        let k1_rank = k1.size().len();
+        if k1_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k1_rank);
+        }
 
         let x_half: Tensor = &x + 0.5 * current_step;
         let y_half: Tensor = &y + 0.5 * current_step * &k1;
         let k2 = f.forward_ts(&[x_half.squeeze(), y_half.squeeze()])?;
+        let k2_rank = k2.size().len();
+        if k2_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k2_rank);
+        }
 
         let x_half_again: Tensor = &x + 0.5 * current_step;
         let y_half_again: Tensor = &y + 0.5 * current_step * &k2;
         let k3 = f.forward_ts(&[x_half_again.squeeze(), y_half_again.squeeze()])?;
+        let k3_rank = k3.size().len();
+        if k3_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k3_rank);
+        }
 
         let x_full = &x + current_step;
         let y_full = &y + current_step * &k3;
         let k4 = f.forward_ts(&[x_full.squeeze(), y_full.squeeze()])?;
+        let k4_rank = k4.size().len();
+        if k4_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k4_rank);
+        }
 
         let step_div_6 = current_step / 6.0;
         let y_next = &y + step_div_6 * (&k1 + 2.0 * &k2 + 2.0 * &k3 + &k4);
@@ -211,6 +232,10 @@ fn solve_glrk4(
         }
 
         let k = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
+        let k_rank = k.size().len();
+        if k_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k_rank);
+        }
 
         const C1: f64 = 0.2113248654f64;
         const C2: f64 = 0.7886751346f64;
@@ -299,17 +324,33 @@ fn solve_rkf45(
         }
 
         let k1 = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
+        let k1_rank = k1.size().len();
+        if k1_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k1_rank);
+        }
 
         let k2 = {
             let x_step: Tensor = &x + 0.25 * &step;
             let y_step: Tensor = &y + 0.25 * &step * &k1;
-            f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?
+            let k2_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
+            let k2_rank = k2_unchecked.size().len();
+            if k2_rank != 1 {
+                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k2_rank);
+            }
+
+            k2_unchecked
         };
 
         let k3 = {
             let x_step: Tensor = &x + 0.375 * &step;
             let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
-            f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?
+            let k3_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
+            let k3_rank = k3_unchecked.size().len();
+            if k3_rank != 1 {
+                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k3_rank);
+            }
+
+            k3_unchecked
         };
 
         let k4 = {
@@ -318,7 +359,13 @@ fn solve_rkf45(
                 + (1932.0 / 2197.0 * &step * &k1)
                 + (-7200.0 / 2197.0 * &step * &k2)
                 + (7296.0 / 2197.0 * &step * &k3);
-            f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?
+            let k4_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
+            let k4_rank = k4_unchecked.size().len();
+            if k4_rank != 1 {
+                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k4_rank);
+            }
+
+            k4_unchecked
         };
 
         let k5 = {
@@ -328,7 +375,13 @@ fn solve_rkf45(
                 + (-8.0 * &step * &k2)
                 + (3680.0 / 513.0 * &step * &k3)
                 + (-845.0 / 4104.0 * &step * &k4);
-            f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?
+            let k5_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
+            let k5_rank = k5_unchecked.size().len();
+            if k5_rank != 1 {
+                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k5_rank);
+            }
+
+            k5_unchecked
         };
 
         let k6 = {
@@ -339,7 +392,13 @@ fn solve_rkf45(
                 + (-3544.0 / 2565.0 * &step * &k3)
                 + (1859.0 / 4104.0 * &step * &k4)
                 + (-11.0 / 40.0 * &step * &k5);
-            f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?
+            let k6_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
+            let k6_rank = k6_unchecked.size().len();
+            if k6_rank != 1 {
+                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k6_rank);
+            }
+
+            k6_unchecked
         };
 
         let next_y4: Tensor = &y
@@ -420,8 +479,11 @@ fn solve_row1(
             &y_prev,
         );
         let f_current = f
-            .forward_ts(&[x_prev.squeeze().copy(), y_prev.copy()])?
-            .squeeze();
+            .forward_ts(&[x_prev.squeeze().copy(), y_prev.copy()])?;
+        let f_current_rank = f_current.size().len();
+        if f_current_rank != 1 {
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", f_current_rank);
+        }
 
         let n = jacobian.size()[0];
         let eye = Tensor::eye(n, (tch::Kind::Float, jacobian.device()));
