@@ -132,6 +132,13 @@ impl Optimizer for CG {
                 if grad.norm().double_value(&[]) < gtol {
                     return Ok(x);
                 }
+            } else {
+                // This check is necessary. Continuation of the algorithm
+                // with gradient equal to exactly zero leads to NaN appearing
+                // in the result.
+                if grad.norm().double_value(&[]) == 0. {
+                    return Ok(x);
+                }
             }
 
             // Calculate direction according to the Polak-Ribiere formula
@@ -215,6 +222,13 @@ impl Optimizer for BFGS {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
                 if curr_grad.norm().double_value(&[]) < gtol {
+                    return Ok(x);
+                }
+            } else {
+                // This check is necessary. Continuation of the algorithm
+                // with gradient equal to exactly zero leads to NaN appearing
+                // in the result.
+                if curr_grad.norm().double_value(&[]) == 0. {
                     return Ok(x);
                 }
             }
