@@ -9,7 +9,7 @@ description.workspace = true
 readme.workspace = true
 
 [dependencies]
-pyo3 = { version = "0.24.0", features = ["extension-module", "abi3", "abi3-py312"] }
+pyo3 = { version = "0.24.0", features = ["extension-module", "abi3", "abi3-py313"] }
 pyo3-tch = "0.20.0"
 tch = "0.20.0"
 mini-ode = { path = "../mini-ode" }
