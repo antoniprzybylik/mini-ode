@@ -170,5 +170,6 @@ This project is licensed under the [GPL-2.0 License](LICENSE).
 ## 👤 Author
 
 **Antoni Przybylik**  
+📧 [antoni@taon.io](mailto:antoni@taon.io)  
 📧 [antoni.przybylik@wp.pl](mailto:antoni.przybylik@wp.pl)  
 🔗 [https://github.com/antoniprzybylik](https://github.com/antoniprzybylik)
