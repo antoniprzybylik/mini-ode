@@ -1,17 +1,34 @@
 use anyhow::anyhow;
+use std::sync::Arc;
 use tch::IndexOp;
 use tch::Tensor;
-use std::sync::Arc;
 
 pub mod optimizers;
 
 pub enum Solver {
-    Euler { step: f64 },
-    RK4 { step: f64 },
-    ImplicitEuler { step: f64, optimizer: Arc<dyn optimizers::Optimizer> },
-    GLRK4 { step: f64, optimizer: Arc<dyn optimizers::Optimizer> },
-    RKF45 { rtol: f64, atol: f64, min_step: f64, safety_factor: f64 },
-    ROW1 { step: f64 }
+    Euler {
+        step: f64,
+    },
+    RK4 {
+        step: f64,
+    },
+    ImplicitEuler {
+        step: f64,
+        optimizer: Arc<dyn optimizers::Optimizer>,
+    },
+    GLRK4 {
+        step: f64,
+        optimizer: Arc<dyn optimizers::Optimizer>,
+    },
+    RKF45 {
+        rtol: f64,
+        atol: f64,
+        min_step: f64,
+        safety_factor: f64,
+    },
+    ROW1 {
+        step: f64,
+    },
 }
 
 impl Solver {
@@ -19,34 +36,65 @@ impl Solver {
         &self,
         f: tch::CModule,
         x_span: Tensor,
-        y0: Tensor
+        y0: Tensor,
     ) -> anyhow::Result<(Tensor, Tensor)> {
         if x_span.size() != [2] {
-            return Err(anyhow!("x_span must be of shape [2] but it has shape {:?}", x_span.size().as_slice()));
+            return Err(anyhow!(
+                "x_span must be of shape [2] but it has shape {:?}",
+                x_span.size().as_slice()
+            ));
         }
         if y0.size().len() != 1 {
-            return Err(anyhow!("y0 must be a one-dimensional tensor but it has {} dimensions", y0.size().len()));
+            return Err(anyhow!(
+                "y0 must be a one-dimensional tensor but it has {} dimensions",
+                y0.size().len()
+            ));
         }
         if x_span.device() != y0.device() {
-            return Err(anyhow!("x_span and y0 must reside on the same device. Device of x_span is {:?}. Device of y0 is {:?}", x_span.device(), y0.device()));
+            return Err(anyhow!(
+                "x_span and y0 must reside on the same device. Device of x_span is {:?}. Device of y0 is {:?}",
+                x_span.device(),
+                y0.device()
+            ));
         }
-        if x_span.kind() != tch::Kind::Double && x_span.kind() != tch::Kind::Float && x_span.kind() != tch::Kind::BFloat16 && x_span.kind() != tch::Kind::Half {
+        if x_span.kind() != tch::Kind::Double
+            && x_span.kind() != tch::Kind::Float
+            && x_span.kind() != tch::Kind::BFloat16
+            && x_span.kind() != tch::Kind::Half
+        {
             return Err(anyhow!("x_span is of unsupported kind {:?}", x_span.kind()));
         }
-        if y0.kind() != tch::Kind::Double && y0.kind() != tch::Kind::Float && y0.kind() != tch::Kind::BFloat16 && y0.kind() != tch::Kind::Half {
+        if y0.kind() != tch::Kind::Double
+            && y0.kind() != tch::Kind::Float
+            && y0.kind() != tch::Kind::BFloat16
+            && y0.kind() != tch::Kind::Half
+        {
             return Err(anyhow!("y0 is of unsupported kind {:?}", y0.kind()));
         }
         if x_span.kind() != y0.kind() {
-            return Err(anyhow!("x_span and y0 must be of the same kind. Kind of x_span is {:?}. Kind of y0 is {:?}", x_span.kind(), y0.kind()));
+            return Err(anyhow!(
+                "x_span and y0 must be of the same kind. Kind of x_span is {:?}. Kind of y0 is {:?}",
+                x_span.kind(),
+                y0.kind()
+            ));
         }
 
         match self {
             Self::Euler { step } => solve_euler(f, x_span, y0, *step),
             Self::RK4 { step } => solve_rk4(f, x_span, y0, *step),
-            Self::ImplicitEuler { step, optimizer } => solve_implicit_euler(f, x_span, y0, *step, optimizer.as_ref()),
-            Self::GLRK4 { step, optimizer } => solve_glrk4(f, x_span, y0, *step, optimizer.as_ref()),
-            Self::RKF45 { rtol, atol, min_step, safety_factor } => solve_rkf45(f, x_span, y0, *rtol, *atol, *min_step, *safety_factor),
-            Self::ROW1 { step } => solve_row1(f, x_span, y0, *step)
+            Self::ImplicitEuler { step, optimizer } => {
+                solve_implicit_euler(f, x_span, y0, *step, optimizer.as_ref())
+            }
+            Self::GLRK4 { step, optimizer } => {
+                solve_glrk4(f, x_span, y0, *step, optimizer.as_ref())
+            }
+            Self::RKF45 {
+                rtol,
+                atol,
+                min_step,
+                safety_factor,
+            } => solve_rkf45(f, x_span, y0, *rtol, *atol, *min_step, *safety_factor),
+            Self::ROW1 { step } => solve_row1(f, x_span, y0, *step),
         }
     }
 }
@@ -77,9 +125,12 @@ fn solve_euler(
         let dy = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
         let dy_rank = dy.size().len();
         if dy_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", dy_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                dy_rank
+            );
         }
-        
+
         y = &y + current_step * &dy;
         x = &x + current_step;
 
@@ -116,7 +167,10 @@ fn solve_rk4(
         let k1 = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
         let k1_rank = k1.size().len();
         if k1_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k1_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k1_rank
+            );
         }
 
         let x_half: Tensor = &x + 0.5 * current_step;
@@ -124,7 +178,10 @@ fn solve_rk4(
         let k2 = f.forward_ts(&[x_half.squeeze(), y_half.squeeze()])?;
         let k2_rank = k2.size().len();
         if k2_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k2_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k2_rank
+            );
         }
 
         let x_half_again: Tensor = &x + 0.5 * current_step;
@@ -132,7 +189,10 @@ fn solve_rk4(
         let k3 = f.forward_ts(&[x_half_again.squeeze(), y_half_again.squeeze()])?;
         let k3_rank = k3.size().len();
         if k3_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k3_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k3_rank
+            );
         }
 
         let x_full = &x + current_step;
@@ -140,7 +200,10 @@ fn solve_rk4(
         let k4 = f.forward_ts(&[x_full.squeeze(), y_full.squeeze()])?;
         let k4_rank = k4.size().len();
         if k4_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k4_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k4_rank
+            );
         }
 
         let step_div_6 = current_step / 6.0;
@@ -183,19 +246,19 @@ fn solve_implicit_euler(
         let x_next = &x + current_step;
         let y_prev = y.copy();
 
-        let y_next = optimizer.optimize(
-            &|y_next: &Tensor| {
-                let f_next = f
-                    .forward_ts(&[x_next.squeeze().copy(), y_next.squeeze().copy()])
-                    .unwrap();
-                let y_pred = &y_prev.squeeze() + current_step * &f_next;
-                (y_next - &y_pred).pow_tensor_scalar(2).sum(y_next.kind())
-            },
-            &(&y_prev.detach().squeeze()
-                + current_step * f.forward_ts(&[&x.squeeze(), &y_prev.squeeze()])?),
-        ).map_err( |err| {
-            anyhow!(format!("Optimizer failed with: {}", err))
-        })?;
+        let y_next = optimizer
+            .optimize(
+                &|y_next: &Tensor| {
+                    let f_next = f
+                        .forward_ts(&[x_next.squeeze().copy(), y_next.squeeze().copy()])
+                        .unwrap();
+                    let y_pred = &y_prev.squeeze() + current_step * &f_next;
+                    (y_next - &y_pred).pow_tensor_scalar(2).sum(y_next.kind())
+                },
+                &(&y_prev.detach().squeeze()
+                    + current_step * f.forward_ts(&[&x.squeeze(), &y_prev.squeeze()])?),
+            )
+            .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
         y = y_next.unsqueeze(0);
         x = x_next.copy();
@@ -257,31 +320,31 @@ fn solve_glrk4(
             ],
             0,
         );
-        let k1k2 = optimizer.optimize(
-            &|k1k2_guess| {
-                let diff1 = k1k2_guess.i(0..=1)
-                    - f.forward_ts(&[
-                        &x.squeeze() + C1 * current_step,
-                        &y.squeeze()
-                            + (A11 * k1k2_guess.i(0..=1) + A12 * k1k2_guess.i(2..=3))
-                                * current_step,
-                    ])
-                    .unwrap();
-                let diff2 = k1k2_guess.i(2..=3)
-                    - f.forward_ts(&[
-                        &x.squeeze() + C2 * current_step,
-                        &y.squeeze()
-                            + (A21 * k1k2_guess.i(0..=1) + A22 * k1k2_guess.i(2..=3))
-                                * current_step,
-                    ])
-                    .unwrap();
+        let k1k2 = optimizer
+            .optimize(
+                &|k1k2_guess| {
+                    let diff1 = k1k2_guess.i(0..=1)
+                        - f.forward_ts(&[
+                            &x.squeeze() + C1 * current_step,
+                            &y.squeeze()
+                                + (A11 * k1k2_guess.i(0..=1) + A12 * k1k2_guess.i(2..=3))
+                                    * current_step,
+                        ])
+                        .unwrap();
+                    let diff2 = k1k2_guess.i(2..=3)
+                        - f.forward_ts(&[
+                            &x.squeeze() + C2 * current_step,
+                            &y.squeeze()
+                                + (A21 * k1k2_guess.i(0..=1) + A22 * k1k2_guess.i(2..=3))
+                                    * current_step,
+                        ])
+                        .unwrap();
 
-                diff1.dot(&diff1) + diff2.dot(&diff2)
-            },
-            &first_k1k2_guess,
-        ).map_err( |err| {
-            anyhow!(format!("Optimizer failed with: {}", err))
-        })?;
+                    diff1.dot(&diff1) + diff2.dot(&diff2)
+                },
+                &first_k1k2_guess,
+            )
+            .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
         assert!(k1k2.size().len() == 1);
         assert!(k1k2.size()[0] == 4);
 
@@ -326,7 +389,10 @@ fn solve_rkf45(
         let k1 = f.forward_ts(&[x.squeeze().copy(), y.squeeze().copy()])?;
         let k1_rank = k1.size().len();
         if k1_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k1_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k1_rank
+            );
         }
 
         let k2 = {
@@ -335,7 +401,10 @@ fn solve_rkf45(
             let k2_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
             let k2_rank = k2_unchecked.size().len();
             if k2_rank != 1 {
-                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k2_rank);
+                anyhow::bail!(
+                    "Derivative CModule returned tensor of bad rank {}.",
+                    k2_rank
+                );
             }
 
             k2_unchecked
@@ -347,7 +416,10 @@ fn solve_rkf45(
             let k3_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
             let k3_rank = k3_unchecked.size().len();
             if k3_rank != 1 {
-                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k3_rank);
+                anyhow::bail!(
+                    "Derivative CModule returned tensor of bad rank {}.",
+                    k3_rank
+                );
             }
 
             k3_unchecked
@@ -362,7 +434,10 @@ fn solve_rkf45(
             let k4_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
             let k4_rank = k4_unchecked.size().len();
             if k4_rank != 1 {
-                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k4_rank);
+                anyhow::bail!(
+                    "Derivative CModule returned tensor of bad rank {}.",
+                    k4_rank
+                );
             }
 
             k4_unchecked
@@ -378,7 +453,10 @@ fn solve_rkf45(
             let k5_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
             let k5_rank = k5_unchecked.size().len();
             if k5_rank != 1 {
-                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k5_rank);
+                anyhow::bail!(
+                    "Derivative CModule returned tensor of bad rank {}.",
+                    k5_rank
+                );
             }
 
             k5_unchecked
@@ -395,7 +473,10 @@ fn solve_rkf45(
             let k6_unchecked = f.forward_ts(&[x_step.squeeze(), y_step.squeeze()])?;
             let k6_rank = k6_unchecked.size().len();
             if k6_rank != 1 {
-                anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k6_rank);
+                anyhow::bail!(
+                    "Derivative CModule returned tensor of bad rank {}.",
+                    k6_rank
+                );
             }
 
             k6_unchecked
@@ -478,11 +559,13 @@ fn solve_row1(
             },
             &y_prev,
         );
-        let f_current = f
-            .forward_ts(&[x_prev.squeeze().copy(), y_prev.copy()])?;
+        let f_current = f.forward_ts(&[x_prev.squeeze().copy(), y_prev.copy()])?;
         let f_current_rank = f_current.size().len();
         if f_current_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", f_current_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                f_current_rank
+            );
         }
 
         let n = jacobian.size()[0];

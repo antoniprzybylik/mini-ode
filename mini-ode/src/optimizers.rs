@@ -8,7 +8,8 @@ use tch::Tensor;
 /// Optimizer interface common for any optimizer in the library
 pub trait Optimizer: Send + Sync {
     /// Solves the problem of optimization of function `function` starting from point `x0`
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor>;
+    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor)
+    -> anyhow::Result<Tensor>;
 }
 
 /// Broyden-Fletcher-Goldfarb-Shanno optimization algorithm
@@ -112,7 +113,11 @@ impl CG {
 }
 
 impl Optimizer for CG {
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor> {
+    fn optimize(
+        &self,
+        function: &dyn Fn(&Tensor) -> Tensor,
+        x0: &Tensor,
+    ) -> anyhow::Result<Tensor> {
         // Ensure that rank of the initital guess tensor is 1
         if x0.size().len() != 1 {
             return Err(anyhow!("`x0` must have rank 1"));
@@ -197,7 +202,11 @@ impl BFGS {
 }
 
 impl Optimizer for BFGS {
-    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor) -> anyhow::Result<Tensor> {
+    fn optimize(
+        &self,
+        function: &dyn Fn(&Tensor) -> Tensor,
+        x0: &Tensor,
+    ) -> anyhow::Result<Tensor> {
         // Ensure that rank of the initital guess tensor is 1
         if x0.size().len() != 1 {
             return Err(anyhow!("`x0` must have rank 1"));
@@ -214,9 +223,13 @@ impl Optimizer for BFGS {
             // Give knowledgable error message to the user
             // when BFGS fails due to unsufficient memory.
             Err(tch::TchError::Torch(_)) => {
-                return Err(anyhow!("Could not allocate {}x{} matrix. Maybe try less resourcefull algorithm.", x0_length, x0_length));
-            },
-            e => e.unwrap()
+                return Err(anyhow!(
+                    "Could not allocate {}x{} matrix. Maybe try less resourcefull algorithm.",
+                    x0_length,
+                    x0_length
+                ));
+            }
+            e => e.unwrap(),
         };
         let mut x = x0.copy();
         let mut appr_inv_h = identity.copy();

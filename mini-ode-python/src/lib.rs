@@ -1,5 +1,5 @@
-use mini_ode::optimizers::Optimizer;
 use mini_ode::Solver;
+use mini_ode::optimizers::Optimizer;
 use pyo3::prelude::*;
 use pyo3_tch::PyTensor;
 use std::io::Cursor;
@@ -55,7 +55,7 @@ impl PySolver {
         py: Python,
         f: PyObject,
         x_span: PyTensor,
-        y0: PyTensor
+        y0: PyTensor,
     ) -> PyResult<(PyTensor, PyTensor)> {
         let f_module = convert_function(py, f)?;
         let x_span_inner = x_span.0.copy();
@@ -81,17 +81,28 @@ fn create_rk4_solver(step: f64) -> PySolver {
 
 #[pyfunction(name = "ImplicitEulerMethodSolver")]
 fn create_implicit_euler_solver(step: f64, optimizer: PyOptimizer) -> PySolver {
-    PySolver(Solver::ImplicitEuler { step, optimizer: optimizer.0 })
+    PySolver(Solver::ImplicitEuler {
+        step,
+        optimizer: optimizer.0,
+    })
 }
 
 #[pyfunction(name = "GLRK4MethodSolver")]
 fn create_glrk4_solver(step: f64, optimizer: PyOptimizer) -> PySolver {
-    PySolver(Solver::GLRK4 { step, optimizer: optimizer.0 })
+    PySolver(Solver::GLRK4 {
+        step,
+        optimizer: optimizer.0,
+    })
 }
 
 #[pyfunction(name = "RKF45MethodSolver")]
 fn create_rkf45_solver(rtol: f64, atol: f64, min_step: f64, safety_factor: f64) -> PySolver {
-    PySolver(Solver::RKF45 { rtol, atol, min_step, safety_factor })
+    PySolver(Solver::RKF45 {
+        rtol,
+        atol,
+        min_step,
+        safety_factor,
+    })
 }
 
 #[pyfunction(name = "ROW1MethodSolver")]
