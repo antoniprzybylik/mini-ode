@@ -207,7 +207,17 @@ impl Optimizer for BFGS {
         let kind = x0.kind();
         let device = x0.device();
 
-        let identity = Tensor::eye(x0.size()[0], (kind, device));
+        let x0_length = x0.size()[0];
+        let identity = match Tensor::f_eye(x0_length, (kind, device)) {
+            Ok(matrix) => matrix,
+            // BFGS requires a lot of resources.
+            // Give knowledgable error message to the user
+            // when BFGS fails due to unsufficient memory.
+            Err(tch::TchError::Torch(_)) => {
+                return Err(anyhow!("Could not allocate {}x{} matrix. Maybe try less resourcefull algorithm.", x0_length, x0_length));
+            },
+            e => e.unwrap()
+        };
         let mut x = x0.copy();
         let mut appr_inv_h = identity.copy();
         let mut curr_grad = differentiate(function, &x);
