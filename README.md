@@ -2,7 +2,7 @@
 
 A minimalistic, multi-language library for solving Ordinary Differential Equations (ODEs). `mini-ode` is designed with a shared Rust core and a consistent interface for both **Rust** and **Python** users. It supports explicit, implicit, fixed step and adaptive step algorithms.
 
-[![License: GPL-2.0](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE)
+[![License: GPL-2.0](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE) [![crates.io version](https://img.shields.io/crates/v/mini-ode)](CRATESIO_VERSION) [![PyPI version](https://img.shields.io/pypi/v/mini-ode)](PYPI_VERSION)
 
 ## ✨ Features
 
