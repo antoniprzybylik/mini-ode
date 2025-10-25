@@ -1,0 +1,3 @@
+target/
+mini-ode-python/py_src/mini_ode/__pycache__/
+mini-ode-python/py_src/mini_ode/rust.abi3.so
