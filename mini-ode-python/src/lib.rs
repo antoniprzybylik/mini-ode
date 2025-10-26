@@ -79,11 +79,11 @@ struct PySolver(Solver);
 
 #[pymethods]
 impl PySolver {
-    fn solve(
+    fn solve<'py>(
         &self,
-        py: Python,
-        f: PyObject,
-        x_span: &Bound<'_, PyAny>,
+        py: Python<'py>,
+        f: &Bound<'py, PyAny>,
+        x_span: &Bound<'py, PyAny>,
         y0: PyTensor,
     ) -> PyResult<(PyTensor, PyTensor)> {
         let f_module = convert_function(py, f)?;
@@ -146,19 +146,17 @@ fn create_row1_solver(step: f64) -> PySolver {
     PySolver(Solver::ROW1 { step })
 }
 
-fn convert_function(py: Python, f: PyObject) -> PyResult<tch::CModule> {
+fn convert_function<'py>(py: Python<'py>, f: &Bound<'py, PyAny>) -> PyResult<tch::CModule> {
     let torch = py.import("torch")?;
     let script_function_type = torch.getattr("jit")?.getattr("ScriptFunction")?;
 
-    if !f.bind(py).is_instance(&script_function_type)? {
+    if !f.is_instance(&script_function_type)? {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "Function must be a torch.jit.ScriptFunction",
         ));
     }
 
-    let buffer = f
-        .call_method0(py, "save_to_buffer")?
-        .extract::<Vec<u8>>(py)?;
+    let buffer = f.call_method0("save_to_buffer")?.extract::<Vec<u8>>()?;
     let mut cursor = Cursor::new(buffer);
     tch::CModule::load_data(&mut cursor).map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to load model: {}", e))
