@@ -45,6 +45,35 @@ fn create_bfgs(
     )))
 }
 
+fn extract_pair<T>(object: &Bound<'_, PyAny>) -> Option<(T, T)>
+where
+    T: std::clone::Clone + for<'a> pyo3::FromPyObject<'a>,
+{
+    if let Ok(tuple) = object.downcast::<pyo3::types::PyTuple>() {
+        if tuple.len() != 2 {
+            return None;
+        }
+
+        let a = tuple.get_item(0).ok()?.extract::<T>().ok()?;
+        let b = tuple.get_item(1).ok()?.extract::<T>().ok()?;
+
+        return Some((a, b));
+    }
+
+    if let Ok(list) = object.downcast::<pyo3::types::PyList>() {
+        if list.len() != 2 {
+            return None;
+        }
+
+        let a = list.get_item(0).ok()?.extract::<T>().ok()?;
+        let b = list.get_item(1).ok()?.extract::<T>().ok()?;
+
+        return Some((a, b));
+    }
+
+    None
+}
+
 #[pyclass(module = "rust", name = "Solver")]
 struct PySolver(Solver);
 
@@ -54,15 +83,22 @@ impl PySolver {
         &self,
         py: Python,
         f: PyObject,
-        x_span: PyTensor,
+        x_span: &Bound<'_, PyAny>,
         y0: PyTensor,
     ) -> PyResult<(PyTensor, PyTensor)> {
         let f_module = convert_function(py, f)?;
-        let x_span_inner = x_span.0.copy();
+        let x_span_extracted = match extract_pair::<f64>(x_span) {
+            Some(pair) => pair,
+            None => {
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "`x_span` must be a pair of floats",
+                ));
+            }
+        };
         let y0_inner = y0.0.copy();
         py.allow_threads(|| {
             self.0
-                .solve(f_module, x_span_inner, y0_inner)
+                .solve(f_module, x_span_extracted, y0_inner)
                 .map(|(x, y)| (PyTensor(x), PyTensor(y)))
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
         })
