@@ -9,6 +9,17 @@ use std::sync::Arc;
 #[pyclass(module = "rust.optimizers", name = "Optimizer")]
 struct PyOptimizer(Arc<dyn Optimizer + Send + Sync>);
 
+#[pymethods]
+impl PyOptimizer {
+    fn __repr__(&self) -> String {
+        format!("{}", self.0)
+    }
+
+    fn __str__(&self) -> String {
+        self.__repr__()
+    }
+}
+
 #[pyfunction(
     name = "CG",
     signature = (max_steps, gtol=None, ftol=None, linesearch_atol=None)
@@ -102,6 +113,16 @@ impl PySolver {
                 .map(|(x, y)| (PyTensor(x), PyTensor(y)))
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
         })
+    }
+
+    fn __repr__(&self) -> String {
+        let solver_string = format!("{}", self.0);
+        let to_insert = "MethodSolver(";
+        solver_string.replacen("(", to_insert, 1)
+    }
+
+    fn __str__(&self) -> String {
+        self.__repr__()
     }
 }
 

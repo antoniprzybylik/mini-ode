@@ -3,10 +3,11 @@
 //! The user may create objects containing optimizer configuration and pass it to ODE solver.
 
 use anyhow::anyhow;
+use std::fmt;
 use tch::Tensor;
 
 /// Optimizer interface common for any optimizer in the library
-pub trait Optimizer: Send + Sync {
+pub trait Optimizer: Send + Sync + fmt::Display {
     /// Solves the problem of optimization of function `function` starting from point `x0`
     fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor)
     -> anyhow::Result<Tensor>;
@@ -181,6 +182,24 @@ impl Optimizer for CG {
     }
 }
 
+impl fmt::Display for CG {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut string = String::from("CG(");
+
+        string = string + "max_steps=" + self.max_steps.to_string().as_str();
+        if let Some(gtol) = self.gtol {
+            string = string + ", gtol=" + gtol.to_string().as_str();
+        }
+        if let Some(ftol) = self.ftol {
+            string = string + ", ftol=" + ftol.to_string().as_str();
+        }
+
+        string = string + ", linesearch_atol=" + self.linesearch_atol.to_string().as_str() + ")";
+
+        write!(f, "{}", string)
+    }
+}
+
 impl BFGS {
     pub fn new(
         max_steps: usize,
@@ -323,5 +342,23 @@ impl Optimizer for BFGS {
         }
 
         Ok(x)
+    }
+}
+
+impl fmt::Display for BFGS {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut string = String::from("BFGS(");
+
+        string = string + "max_steps=" + self.max_steps.to_string().as_str();
+        if let Some(gtol) = self.gtol {
+            string = string + ", gtol=" + gtol.to_string().as_str();
+        }
+        if let Some(ftol) = self.ftol {
+            string = string + ", ftol=" + ftol.to_string().as_str();
+        }
+
+        string = string + ", linesearch_atol=" + self.linesearch_atol.to_string().as_str() + ")";
+
+        write!(f, "{}", string)
     }
 }

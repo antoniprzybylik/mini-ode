@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use std::fmt;
 use std::sync::Arc;
 use tch::IndexOp;
 use tch::Tensor;
@@ -68,6 +69,32 @@ impl Solver {
                 safety_factor,
             } => solve_rkf45(f, x_span, y0, *rtol, *atol, *min_step, *safety_factor),
             Self::ROW1 { step } => solve_row1(f, x_span, y0, *step),
+        }
+    }
+}
+
+impl fmt::Display for Solver {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Solver::Euler { step } => write!(f, "Euler(step={})", step),
+            Solver::RK4 { step } => write!(f, "RK4(step={})", step),
+            Solver::ImplicitEuler { step, optimizer } => {
+                write!(f, "ImplicitEuler(step={}, optimizer={})", step, optimizer)
+            }
+            Solver::GLRK4 { step, optimizer } => {
+                write!(f, "GLRK4(step={}, optimizer={})", step, optimizer)
+            }
+            Solver::RKF45 {
+                rtol,
+                atol,
+                min_step,
+                safety_factor,
+            } => write!(
+                f,
+                "RKF45(rtol={}, atol={}, min_step={}, safety_factor={})",
+                rtol, atol, min_step, safety_factor
+            ),
+            Solver::ROW1 { step } => write!(f, "ROW1(step={})", step),
         }
     }
 }
