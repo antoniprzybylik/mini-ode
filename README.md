@@ -66,7 +66,7 @@ def f(x: torch.Tensor, y: torch.Tensor):
     return y.flip(0) - torch.tensor([0, 1]) * (y.flip(0) ** 3)
 
 # 2. Trace the function to TorchScript
-traced_f = torch.jit.trace(f, (torch.tensor(0.), torch.tensor([[0., 0.]])))
+traced_f = torch.jit.trace(f, (torch.tensor(0.), torch.tensor([0., 0.])))
 
 # 3. Create a solver instance
 solver = mini_ode.RK4MethodSolver(step=0.01)
