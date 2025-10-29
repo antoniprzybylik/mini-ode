@@ -124,7 +124,7 @@ impl Optimizer for CG {
             return Err(anyhow!("`x0` must have rank 1"));
         }
 
-        let iters_to_reset = x0.size()[0];
+        let iters_to_reset = x0.size()[0] as usize;
         let mut prev_grad = Tensor::zeros_like(&x0);
         let mut prev_direction = Tensor::zeros_like(&x0);
         let mut prev_y: Option<Tensor> = None;
