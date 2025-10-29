@@ -124,7 +124,6 @@ impl Optimizer for CG {
             return Err(anyhow!("`x0` must have rank 1"));
         }
 
-        let iters_to_reset = x0.size()[0] as usize;
         let mut prev_grad = Tensor::zeros_like(&x0);
         let mut prev_direction = Tensor::zeros_like(&x0);
         let mut prev_y: Option<Tensor> = None;
@@ -147,14 +146,33 @@ impl Optimizer for CG {
                 }
             }
 
-            // Calculate direction according to the Polak-Ribiere formula
-            let direction = match step_num % iters_to_reset {
+            // Calculate direction with PR+ and orthogonality-based restart
+            let direction = match step_num {
                 0 => -&grad,
                 _ => {
-                    let beta = grad.squeeze().dot(&(&grad - &prev_grad).squeeze())
-                        / prev_grad.squeeze().dot(&prev_grad.squeeze());
+                    let orthogonality_measure = grad.squeeze().dot(&prev_grad.squeeze()).abs()
+                        / grad.squeeze().dot(&grad.squeeze());
+                    if orthogonality_measure.double_value(&[]) > 0.2 {
+                        // Restart
+                        -&grad
+                    } else {
+                        let beta = grad.squeeze().dot(&(&grad - &prev_grad).squeeze())
+                            / prev_grad.squeeze().dot(&prev_grad.squeeze());
+                        // Clamp beta to be nonnegative (PR+)
+                        let beta = if beta.double_value(&[]) > 0. {
+                            beta
+                        } else {
+                            tch::Tensor::zeros_like(&beta)
+                        };
+                        // Clamp beta to not be too large (this may result in numerical instability)
+                        let beta = if beta.double_value(&[]) > 1000000000000. {
+                            tch::Tensor::ones_like(&beta) * 1000000000000.
+                        } else {
+                            beta
+                        };
 
-                    -&grad + beta * &prev_direction
+                        -&grad + beta * &prev_direction
+                    }
                 }
             };
 
