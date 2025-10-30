@@ -21,8 +21,6 @@ pub struct BFGS {
     gtol: Option<f64>,
     // minimum change in the objective function between iterations
     ftol: Option<f64>,
-    // Absolute error tolerance for line search
-    linesearch_atol: f64,
 }
 
 /// Conjugate Gradient optimization algorithm
@@ -33,8 +31,6 @@ pub struct CG {
     gtol: Option<f64>,
     // Minimum change in the objective function between iterations
     ftol: Option<f64>,
-    // Absolute error tolerance for line search
-    linesearch_atol: f64,
 }
 
 fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
@@ -98,17 +94,11 @@ impl CG {
         max_steps: usize,
         gtol: Option<f64>,
         ftol: Option<f64>,
-        linesearch_atol: Option<f64>,
     ) -> Self {
         Self {
             max_steps,
             gtol,
             ftol,
-            linesearch_atol: if let Some(linesearch_atol) = linesearch_atol {
-                linesearch_atol
-            } else {
-                P0
-            },
         }
     }
 }
@@ -123,6 +113,10 @@ impl Optimizer for CG {
         if x0.size().len() != 1 {
             return Err(anyhow!("`x0` must have rank 1"));
         }
+
+        let mut prev3_step_norm = 0f64;
+        let mut prev2_step_norm = 0f64;
+        let mut prev_step_norm = 0f64;
 
         let mut prev_grad = Tensor::zeros_like(&x0);
         let mut prev_direction = Tensor::zeros_like(&x0);
@@ -176,8 +170,18 @@ impl Optimizer for CG {
                 }
             };
 
+            // Calculate linesearch_atol based on previous step norms
+            let linesearch_atol = P0.max(
+                prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 1000.
+            );
+
             // Choose step in direction `direction`
-            let step = choose_step(&x, &direction, &function, self.linesearch_atol);
+            let step = choose_step(&x, &direction, &function, linesearch_atol);
+
+            // Update previous step norms
+            prev3_step_norm = prev2_step_norm;
+            prev2_step_norm = prev_step_norm;
+            prev_step_norm = step.norm().double_value(&[]);
 
             // Apply step
             x = x + step;
@@ -211,8 +215,7 @@ impl fmt::Display for CG {
         if let Some(ftol) = self.ftol {
             string = string + ", ftol=" + ftol.to_string().as_str();
         }
-
-        string = string + ", linesearch_atol=" + self.linesearch_atol.to_string().as_str() + ")";
+        string = string + ")";
 
         write!(f, "{}", string)
     }
@@ -223,17 +226,11 @@ impl BFGS {
         max_steps: usize,
         gtol: Option<f64>,
         ftol: Option<f64>,
-        linesearch_atol: Option<f64>,
     ) -> Self {
         Self {
             max_steps,
             gtol,
             ftol,
-            linesearch_atol: if let Some(linesearch_atol) = linesearch_atol {
-                linesearch_atol
-            } else {
-                P0
-            },
         }
     }
 }
@@ -252,6 +249,10 @@ impl Optimizer for BFGS {
         // Determine the device and kind for use in the function
         let kind = x0.kind();
         let device = x0.device();
+
+        let mut prev3_step_norm = 0f64;
+        let mut prev2_step_norm = 0f64;
+        let mut prev_step_norm = 0f64;
 
         let x0_length = x0.size()[0];
         let identity = match Tensor::f_eye(x0_length, (kind, device)) {
@@ -296,8 +297,18 @@ impl Optimizer for BFGS {
             // Calculate step direction base on the gradient and approximate hessian
             let direction = (-appr_inv_h.mm(&curr_grad.unsqueeze(1))).squeeze();
 
+            // Calculate linesearch_atol based on previous step norms
+            let linesearch_atol = P0.max(
+                prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 100.
+            );
+
             // Choose optimal step in given direction using line search
-            let step = choose_step(&x, &direction, function, self.linesearch_atol);
+            let step = choose_step(&x, &direction, function, linesearch_atol);
+
+            // Update previous step norms
+            prev3_step_norm = prev2_step_norm;
+            prev2_step_norm = prev_step_norm;
+            prev_step_norm = step.norm().double_value(&[]);
 
             // Apply step
             x = x + &step;
@@ -375,7 +386,7 @@ impl fmt::Display for BFGS {
             string = string + ", ftol=" + ftol.to_string().as_str();
         }
 
-        string = string + ", linesearch_atol=" + self.linesearch_atol.to_string().as_str() + ")";
+        string = string + ")";
 
         write!(f, "{}", string)
     }

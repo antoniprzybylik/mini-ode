@@ -83,7 +83,6 @@ Some solvers like `GLRK4MethodSolver` or `ImplicitEulerMethodSolver` require an 
 optimizer = mini_ode.optimizers.CG(
     max_steps=5,
     gtol=1e-8,
-    linesearch_atol=1e-6
 )
 
 solver = mini_ode.GLRK4MethodSolver(step=0.2, optimizer=optimizer)

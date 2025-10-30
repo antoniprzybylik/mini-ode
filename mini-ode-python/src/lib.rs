@@ -22,37 +22,33 @@ impl PyOptimizer {
 
 #[pyfunction(
     name = "CG",
-    signature = (max_steps, gtol=None, ftol=None, linesearch_atol=None)
+    signature = (max_steps, gtol=None, ftol=None)
 )]
 fn create_cg(
     max_steps: usize,
     gtol: Option<f64>,
     ftol: Option<f64>,
-    linesearch_atol: Option<f64>,
 ) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::CG::new(
         max_steps,
         gtol,
         ftol,
-        linesearch_atol,
     )))
 }
 
 #[pyfunction(
     name = "BFGS",
-    signature = (max_steps, gtol=None, ftol=None, linesearch_atol=None)
+    signature = (max_steps, gtol=None, ftol=None)
 )]
 fn create_bfgs(
     max_steps: usize,
     gtol: Option<f64>,
     ftol: Option<f64>,
-    linesearch_atol: Option<f64>,
 ) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::BFGS::new(
         max_steps,
         gtol,
         ftol,
-        linesearch_atol,
     )))
 }
 
