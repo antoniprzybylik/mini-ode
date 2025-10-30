@@ -51,42 +51,40 @@ fn choose_step(
     function: &dyn Fn(&Tensor) -> Tensor,
     atol: f64,
 ) -> Tensor {
-    let (mut x1, mut x2, mut x3, mut x4): (Tensor, Tensor, Tensor, Tensor);
-    let (fx1, mut fx3, mut fx4): (Tensor, Tensor, Tensor);
+    let (mut x1, mut x2, mut x3, mut x4): (f64, f64, f64, f64);
+    let (fx1, mut fx3, mut fx4): (f64, f64, f64);
 
-    let kind = x0.kind();
+    fx1 = function(&x0).double_value(&[]);
 
-    fx1 = function(&x0);
-
-    x1 = Tensor::from(0.).to_kind(kind);
-    x2 = Tensor::from(P0).to_kind(kind);
-    while function(&(x0 + direction * &x2)).double_value(&[]) <= fx1.double_value(&[]) {
+    x1 = 0.;
+    x2 = P0;
+    while function(&(x0 + direction * x2)).double_value(&[]) <= fx1 {
         x2 = &x1 + (&x2 - &x1) * PHI2;
     }
 
-    x3 = x2.copy() - (x2.copy() - &x1) * RPHI;
-    x4 = x1.copy() + (x2.copy() - &x1) * RPHI;
-    fx3 = function(&(x0 + direction * &x3));
-    fx4 = function(&(x0 + direction * &x4));
-    while (x1.copy() - &x2).abs().double_value(&[]) > atol {
-        if fx3.double_value(&[]) < fx4.double_value(&[]) {
-            x2 = x4.copy();
+    x3 = x2 - (x2 - x1) * RPHI;
+    x4 = x1 + (x2 - x1) * RPHI;
+    fx3 = function(&(x0 + direction * x3)).double_value(&[]);
+    fx4 = function(&(x0 + direction * x4)).double_value(&[]);
+    while x2 - x1 > atol {
+        if fx3 < fx4 {
+            x2 = x4;
 
-            fx4 = fx3.copy();
-            x3 = x2.copy() - (x2.copy() - &x1) * RPHI;
-            x4 = x1.copy() + (x2.copy() - &x1) * RPHI;
-            fx3 = function(&(x0 + direction * &x3));
+            fx4 = fx3;
+            x3 = x2 - (x2 - x1) * RPHI;
+            x4 = x1 + (x2 - x1) * RPHI;
+            fx3 = function(&(x0 + direction * x3)).double_value(&[]);
         } else {
-            x1 = x3.copy();
+            x1 = x3;
 
-            fx3 = fx4.copy();
-            x3 = x2.copy() - (x2.copy() - &x1) * RPHI;
-            x4 = x1.copy() + (x2.copy() - &x1) * RPHI;
-            fx4 = function(&(x0 + direction * &x4));
+            fx3 = fx4;
+            x3 = x2 - (x2 - x1) * RPHI;
+            x4 = x1 + (x2 - x1) * RPHI;
+            fx4 = function(&(x0 + direction * x4)).double_value(&[]);
         }
     }
 
-    direction * ((&x1 + &x2) / 2.)
+    direction * ((x1 + x2) / 2.)
 }
 
 impl CG {
