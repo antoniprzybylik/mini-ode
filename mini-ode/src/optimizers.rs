@@ -40,7 +40,7 @@ fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
     tch::Tensor::run_backward(&[y], &[x_with_grad], false, false)[0].copy()
 }
 
-const P0: f64 = 0.000001f64;
+const P0: f64 = 0.0000000001f64;
 
 const PHI2: f64 = 2.618033988749894848207f64;
 const RPHI: f64 = 0.618033988749894848207f64;
@@ -57,7 +57,14 @@ fn choose_step(
     fx1 = function(&x0).double_value(&[]);
 
     x1 = 0.;
-    x2 = P0;
+    // Heuristics: Try to set x2 based on atol value. If we succeed, we can
+    //             skip some forward search iterations.
+    x2 = if function(&(x0 + direction * atol*15.)).double_value(&[]) <= fx1 {
+        atol*15.
+    } else {
+        P0
+    };
+    // Forward search
     while function(&(x0 + direction * x2)).double_value(&[]) <= fx1 {
         x2 = &x1 + (&x2 - &x1) * PHI2;
     }
