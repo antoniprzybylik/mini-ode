@@ -9,11 +9,30 @@ use tch::{IndexOp, Tensor};
 /// Optimizer interface common for any optimizer in the library
 pub trait Optimizer: Send + Sync + fmt::Display {
     /// Solves the problem of optimization of function `function` starting from point `x0`
+    ///
+    /// # Arguments
+    /// * `function` - A closure that takes a 1D tensor `x` and returns a scalar tensor.
+    ///   representing the objective value to minimize.
+    /// * `x0` - Initial guess, 1D tensor accepted by `function`.
+    ///
+    /// # Returns
+    /// Optimal `x`, or error if optimization fails.
+    ///
+    /// # Panics
+    /// May panic if libtorch tensor operations fail.
     fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor)
     -> anyhow::Result<Tensor>;
 }
 
 /// Newton optimization algorithm
+///
+/// This struct configures the Newton method, a second-order optimizer that uses the
+/// Hessian matrix for quadratic approximations.
+///
+/// # Fields
+/// * `max_steps` - Maximum number of optimization steps.
+/// * `gtol` - Optional tolerance for gradient norm (stop if ||grad|| < gtol).
+/// * `ftol` - Optional tolerance for change in objective value (stop if |f - prev_f| < ftol).
 pub struct Newton {
     // Maximum number of optimization steps
     max_steps: usize,
@@ -24,6 +43,15 @@ pub struct Newton {
 }
 
 /// Broyden-Fletcher-Goldfarb-Shanno optimization algorithm
+///
+/// This struct configures the BFGS quasi-Newton method, which approximates the inverse
+/// Hessian using rank-2 updates. It is as memory-intensive as regular Newton method
+/// (O(n^2) storage) but it does not require double differentiation.
+///
+/// # Fields
+/// * `max_steps` - Maximum number of optimization steps.
+/// * `gtol` - Optional tolerance for gradient norm (stop if ||grad|| < gtol).
+/// * `ftol` - Optional tolerance for change in objective value (stop if |f - prev_f| < ftol).
 pub struct BFGS {
     // Maximum number of optimization steps
     max_steps: usize,
@@ -34,6 +62,15 @@ pub struct BFGS {
 }
 
 /// Conjugate Gradient optimization algorithm
+///
+/// This struct configures the nonlinear conjugate gradient method with Polak-Ribiere+
+/// (PR+) beta and orthogonality-based restarts. It is gradient-only (first-order) and
+/// memory-efficient, suitable for large-scale problems.
+///
+/// # Fields
+/// * `max_steps` - Maximum number of optimization steps.
+/// * `gtol` - Optional tolerance for gradient norm (stop if ||grad|| < gtol).
+/// * `ftol` - Optional tolerance for change in objective value (stop if |f - prev_f| < ftol).
 pub struct CG {
     // Maximum number of optimization steps
     max_steps: usize,
@@ -43,6 +80,14 @@ pub struct CG {
     ftol: Option<f64>,
 }
 
+/// Computes the gradient of `function` at `x` using automatic differentiation.
+///
+/// # Arguments
+/// * `function` - A closure that takes a 1D tensor `x` and returns a scalar tensor.
+/// * `x` - Evaluation point (1D tensor).
+///
+/// # Returns
+/// Gradient tensor at `x`.
 fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
@@ -50,6 +95,13 @@ fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
     tch::Tensor::run_backward(&[y], &[x_with_grad], false, false)[0].copy()
 }
 
+/// Computes the gradient and Hessian of `function` at `x` using automatic differentiation.
+///
+/// # Arguments
+/// * `function` - A closure that takes a 1D tensor `x` and returns a scalar tensor.
+/// * `x` - Evaluation point (1D tensor).
+/// # Returns
+/// Tuple `(grad, hessian)`, both detached tensors. `grad` is 1D, `hessian` is 2D.
 fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor) {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
@@ -71,14 +123,33 @@ fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Te
         ));
     }
 
-    (grad.detach(), Tensor::stack(&vectors, 0).detach())
+    // Detach autograd computation graph
+    let grad = grad.detach();
+    // Stack slices of the Hessian matrix and detach autograd computation graph
+    let hessian = Tensor::stack(&vectors, 0).detach();
+
+    (grad, hessian)
 }
 
+/// Minimum step value.
 const P0: f64 = 0.0000000001f64;
 
+/// Golden ratio squared (phi^2)
 const PHI2: f64 = 2.618033988749894848207f64;
+/// Reciprocal of golden ratio (1/phi)
 const RPHI: f64 = 0.618033988749894848207f64;
 
+/// Performs a golden section line search to find a step size that approximately minimizes
+/// `function` along `direction` from `x0`, subject to tolerance `atol`.
+///
+/// # Arguments
+/// * `x0` - Starting point (1D tensor).
+/// * `direction` - Search direction (1D tensor).
+/// * `function` - Objective function.
+/// * `atol` - Absolute tolerance for step size convergence.
+///
+/// # Returns
+/// Optimal step tensor.
 fn choose_step_golden_section(
     x0: &Tensor,
     direction: &Tensor,
@@ -128,6 +199,18 @@ fn choose_step_golden_section(
     direction * ((x1 + x2) / 2.)
 }
 
+/// Performs a backtracking line search to find a step size satisfying the Armijo condition.
+///
+/// # Arguments
+/// * `x0` - Starting point (1D tensor).
+/// * `direction` - Descent direction (1D tensor).
+/// * `function` - Objective function.
+/// * `grad` - Gradient at `x0`.
+/// * `alpha` - Armijo parameter (0 < alpha < 1, 0.1 is recommended).
+/// * `beta` - Backtracking factor (0 < beta < 1, 0.9 is recommended).
+///
+/// # Returns
+/// Step tensor.
 fn choose_step_backtracking(
     x0: &Tensor,
     direction: &Tensor,
@@ -159,6 +242,15 @@ impl CG {
 }
 
 impl Optimizer for CG {
+    /// Creates a new CG optimizer with the given parameters.
+    ///
+    /// # Arguments
+    /// * `max_steps` - Maximum iterations.
+    /// * `gtol` - Optional gradient tolerance.
+    /// * `ftol` - Optional function value change tolerance.
+    ///
+    /// # Returns
+    /// Configured CG instance.
     fn optimize(
         &self,
         function: &dyn Fn(&Tensor) -> Tensor,
@@ -276,6 +368,15 @@ impl fmt::Display for CG {
 }
 
 impl BFGS {
+    /// Creates a new BFGS optimizer with the given parameters.
+    ///
+    /// # Arguments
+    /// * `max_steps` - Maximum iterations.
+    /// * `gtol` - Optional gradient tolerance.
+    /// * `ftol` - Optional function value change tolerance.
+    ///
+    /// # Returns
+    /// Configured BFGS instance.
     pub fn new(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> Self {
         Self {
             max_steps,
@@ -442,6 +543,15 @@ impl fmt::Display for BFGS {
 }
 
 impl Newton {
+    /// Creates a new Newton optimizer with the given parameters.
+    ///
+    /// # Arguments
+    /// * `max_steps` - Maximum iterations.
+    /// * `gtol` - Optional gradient tolerance.
+    /// * `ftol` - Optional function value change tolerance.
+    ///
+    /// # Returns
+    /// Configured Newton instance.
     pub fn new(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> Self {
         Self {
             max_steps,
