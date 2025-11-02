@@ -52,6 +52,22 @@ fn create_bfgs(
     )))
 }
 
+#[pyfunction(
+    name = "Newton",
+    signature = (max_steps, gtol=None, ftol=None)
+)]
+fn create_newton(
+    max_steps: usize,
+    gtol: Option<f64>,
+    ftol: Option<f64>,
+) -> PyOptimizer {
+    PyOptimizer(Arc::new(mini_ode::optimizers::Newton::new(
+        max_steps,
+        gtol,
+        ftol,
+    )))
+}
+
 fn extract_pair<T>(object: &Bound<'_, PyAny>) -> Option<(T, T)>
 where
     T: std::clone::Clone + for<'a> pyo3::FromPyObject<'a>,
@@ -190,6 +206,7 @@ fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_row1_solver, m)?)?;
     m.add_function(wrap_pyfunction!(create_cg, m)?)?;
     m.add_function(wrap_pyfunction!(create_bfgs, m)?)?;
+    m.add_function(wrap_pyfunction!(create_newton, m)?)?;
     m.add_class::<PySolver>()?;
     m.add_class::<PyOptimizer>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
