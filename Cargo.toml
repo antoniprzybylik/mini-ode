@@ -7,7 +7,7 @@ members = [
 
 [workspace.package]
 version = "0.1.3"
-authors = ["Antoni Przybylik <antoni.przybylik@wp.pl>"]
+authors = ["Antoni Michał Przybylik <antoni@taon.io>"]
 license = "GPL-2.0"
 repository = "https://github.com/antoniprzybylik/mini-ode"
 description = "A minimalistic ODE solvers library built on top of PyTorch"
