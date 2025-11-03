@@ -136,6 +136,116 @@ impl PySolver {
     fn __str__(&self) -> String {
         self.__repr__()
     }
+
+    fn __getattr__<'py>(&self, py: Python<'py>, name: &str) -> PyResult<PyObject> {
+        match name {
+            "step" => {
+                if let Some(step) = get_step(&self.0) {
+                    Ok(step.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            "optimizer" => {
+                if let Some(optimizer_inner) = get_optimizer(&self.0) {
+                    let py_optimizer = PyOptimizer(optimizer_inner);
+                    Ok(py_optimizer.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            "rtol" => {
+                if let Some(rtol) = get_rtol(&self.0) {
+                    Ok(rtol.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            "atol" => {
+                if let Some(atol) = get_atol(&self.0) {
+                    Ok(atol.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            "min_step" => {
+                if let Some(min_step) = get_min_step(&self.0) {
+                    Ok(min_step.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            "safety_factor" => {
+                if let Some(safety_factor) = get_safety_factor(&self.0) {
+                    Ok(safety_factor.into_pyobject(py)?.into())
+                } else {
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                }
+            }
+            _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!("'Solver' object has no attribute '{}'", name))),
+        }
+    }
+
+    fn __dir__(&self) -> Vec<String> {
+        // Common attributes
+        let mut attrs = vec!["solve".to_string(), "__repr__".to_string(), "__str__".to_string()];
+
+        // Solver specific attributes
+        match &self.0 {
+            Solver::Euler { .. } | Solver::RK4 { .. } | Solver::ImplicitEuler { .. }
+            | Solver::GLRK4 { .. } | Solver::ROW1 { .. } => attrs.push("step".to_string()),
+            Solver::RKF45 { .. } => {
+                attrs.push("rtol".to_string());
+                attrs.push("atol".to_string());
+                attrs.push("min_step".to_string());
+                attrs.push("safety_factor".to_string());
+            }
+        }
+        if has_optimizer(&self.0) {
+            attrs.push("optimizer".to_string());
+        }
+
+        attrs
+    }
+}
+
+fn get_step(solver: &Solver) -> Option<f64> {
+    match solver {
+        Solver::Euler { step } => Some(*step),
+        Solver::RK4 { step } => Some(*step),
+        Solver::ImplicitEuler { step, .. } => Some(*step),
+        Solver::GLRK4 { step, .. } => Some(*step),
+        Solver::ROW1 { step } => Some(*step),
+        _ => None,
+    }
+}
+
+fn get_optimizer(solver: &Solver) -> Option<Arc<dyn Optimizer + Send + Sync>> {
+    match solver {
+        Solver::ImplicitEuler { optimizer, .. } => Some(optimizer.clone()),
+        Solver::GLRK4 { optimizer, .. } => Some(optimizer.clone()),
+        _ => None,
+    }
+}
+
+fn has_optimizer(solver: &Solver) -> bool {
+    matches!(solver, Solver::ImplicitEuler { .. } | Solver::GLRK4 { .. })
+}
+
+fn get_rtol(solver: &Solver) -> Option<f64> {
+    if let Solver::RKF45 { rtol, .. } = solver { Some(*rtol) } else { None }
+}
+
+fn get_atol(solver: &Solver) -> Option<f64> {
+    if let Solver::RKF45 { atol, .. } = solver { Some(*atol) } else { None }
+}
+
+fn get_min_step(solver: &Solver) -> Option<f64> {
+    if let Solver::RKF45 { min_step, .. } = solver { Some(*min_step) } else { None }
+}
+
+fn get_safety_factor(solver: &Solver) -> Option<f64> {
+    if let Solver::RKF45 { safety_factor, .. } = solver { Some(*safety_factor) } else { None }
 }
 
 #[pyfunction(name = "EulerMethodSolver")]
