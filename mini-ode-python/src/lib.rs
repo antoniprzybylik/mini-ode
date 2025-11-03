@@ -188,7 +188,34 @@ impl PySolver {
 
     fn __dir__(&self) -> Vec<String> {
         // Common attributes
-        let mut attrs = vec!["solve".to_string(), "__repr__".to_string(), "__str__".to_string()];
+        let mut attrs = vec![
+            "__class__".to_string(),
+            "__delattr__".to_string(),
+            "__dir__".to_string(),
+            "__doc__".to_string(),
+            "__eq__".to_string(),
+            "__format__".to_string(),
+            "__ge__".to_string(),
+            "__getattribute__".to_string(),
+            "__getstate__".to_string(),
+            "__gt__".to_string(),
+            "__hash__".to_string(),
+            "__init__".to_string(),
+            "__init_subclass__".to_string(),
+            "__le__".to_string(),
+            "__lt__".to_string(),
+            "__module__".to_string(),
+            "__ne__".to_string(),
+            "__new__".to_string(),
+            "__reduce__".to_string(),
+            "__reduce_ex__".to_string(),
+            "__repr__".to_string(),
+            "__setattr__".to_string(),
+            "__sizeof__".to_string(),
+            "__str__".to_string(),
+            "__subclasshook__".to_string(),
+            "solve".to_string(),
+        ];
 
         // Solver specific attributes
         match &self.0 {
