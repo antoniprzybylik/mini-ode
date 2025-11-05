@@ -6,6 +6,9 @@ use tch::Tensor;
 
 pub mod optimizers;
 
+#[cfg(test)]
+mod tests;
+
 pub enum Solver {
     Euler {
         step: f64,
