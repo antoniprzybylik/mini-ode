@@ -61,6 +61,24 @@ pub struct BFGS {
     ftol: Option<f64>,
 }
 
+/// Halley optimization algorithm
+///
+/// This struct configures the Halley method, a third-order optimizer that uses
+/// tensor of third order derivatives.
+///
+/// # Fields
+/// * `max_steps` - Maximum number of optimization steps.
+/// * `gtol` - Optional tolerance for gradient norm (stop if ||grad|| < gtol).
+/// * `ftol` - Optional tolerance for change in objective value (stop if |f - prev_f| < ftol).
+pub struct Halley {
+    // Maximum number of optimization steps
+    max_steps: usize,
+    // Minimum gradient
+    gtol: Option<f64>,
+    // minimum change in the objective function between iterations
+    ftol: Option<f64>,
+}
+
 /// Conjugate Gradient optimization algorithm
 ///
 /// This struct configures the nonlinear conjugate gradient method with Polak-Ribiere+
@@ -129,6 +147,58 @@ fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Te
     let hessian = Tensor::stack(&vectors, 0).detach();
 
     (grad, hessian)
+}
+
+/// Computes the gradient, Hessian and third derivatives tensor of `function` at `x` using automatic differentiation.
+///
+/// # Arguments
+/// * `function` - A closure that takes a 1D tensor `x` and returns a scalar tensor.
+/// * `x` - Evaluation point (1D tensor).
+/// # Returns
+/// Tuple `(grad, hessian, d3_tensor)`, both detached tensors. `grad` is 1D, `hessian` is 2D, `d3_tensor` is 3D.
+pub fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
+    let x_with_grad = x.detach().copy().set_requires_grad(true);
+    let y = function(&x_with_grad);
+
+    // keep_graph = true (this graph is needed for some functions during second differentiation)
+    // create_graph = true (allow calculating second derivatives)
+    let grad = Tensor::run_backward(&[y], &[&x_with_grad], true, true)[0].copy();
+    let grad_len = grad.size()[0];
+
+    let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
+    for i in 0..grad_len {
+        // keep_graph = true (we need to run backward pass multiple times - in each iteration of the loop)
+        // create_graph = true (we need to differentiate three times)
+        vectors.append(&mut Tensor::run_backward(
+            &[grad.i(i)],
+            &[&x_with_grad],
+            true,
+            true,
+        ));
+    }
+
+    let mut vectors2 = Vec::<Tensor>::with_capacity(grad_len as usize);
+    for i in 0..grad_len {
+        let mut vectors1 = Vec::<Tensor>::with_capacity(grad_len as usize);
+        for j in 0..grad_len {
+            vectors1.append(&mut Tensor::run_backward(
+                &[vectors[i as usize].i(j)],
+                &[&x_with_grad],
+                true,
+                false,
+            ));
+        }
+        vectors2.push(Tensor::stack(&vectors1, 0));
+    }
+
+    // Detach autograd computation graph
+    let grad = grad.detach();
+    // Stack slices of the Hessian matrix and detach autograd computation graph
+    let hessian = Tensor::stack(&vectors, 0).detach();
+    // Stack slices of the tensor of third derivatives and detach autograd computation graph
+    let d3_tensor = Tensor::stack(&vectors2, 0).detach();
+
+    (grad, hessian, d3_tensor)
 }
 
 /// Minimum step value.
@@ -679,6 +749,126 @@ impl Optimizer for Newton {
 impl fmt::Display for Newton {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut string = String::from("Newton(");
+
+        string = string + "max_steps=" + self.max_steps.to_string().as_str();
+        if let Some(gtol) = self.gtol {
+            string = string + ", gtol=" + gtol.to_string().as_str();
+        }
+        if let Some(ftol) = self.ftol {
+            string = string + ", ftol=" + ftol.to_string().as_str();
+        }
+
+        string = string + ")";
+
+        write!(f, "{}", string)
+    }
+}
+
+impl Halley {
+    /// Creates a new Halley optimizer with the given parameters.
+    ///
+    /// # Arguments
+    /// * `max_steps` - Maximum iterations.
+    /// * `gtol` - Optional gradient tolerance.
+    /// * `ftol` - Optional function value change tolerance.
+    ///
+    /// # Returns
+    /// Configured Halley instance.
+    pub fn new(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> Self {
+        Self {
+            max_steps,
+            gtol,
+            ftol,
+        }
+    }
+}
+
+impl Optimizer for Halley {
+    fn optimize(
+        &self,
+        function: &dyn Fn(&Tensor) -> Tensor,
+        x0: &Tensor,
+    ) -> anyhow::Result<Tensor> {
+        // Ensure that rank of the initital guess tensor is 1
+        if x0.size().len() != 1 {
+            return Err(anyhow!("`x0` must have rank 1"));
+        }
+
+        // Determine the device and kind for use in the function
+        let kind = x0.kind();
+        let device = x0.device();
+
+        let x0_length = x0.size()[0];
+
+        // Test for sufficient resources for storing tensor of third order derivatives
+        let _ = match Tensor::f_zeros([x0_length, x0_length, x0_length], (kind, device)) {
+            Ok(matrix) => matrix,
+            // Give knowledgable error message to the user
+            // when there is unsufficient memory.
+            Err(tch::TchError::Torch(_)) => {
+                return Err(anyhow!(
+                    "Could not allocate {}x{}x{} tensor. Maybe try less resourcefull algorithm.",
+                    x0_length,
+                    x0_length,
+                    x0_length
+                ));
+            }
+            e => e.unwrap(),
+        };
+
+        let mut x = x0.copy();
+        let mut curr_y = function(&x);
+
+        // Ensure that output of `function` is a scalar
+        if curr_y.size() != Vec::<i64>::new() {
+            return Err(anyhow!("Output of function `function` must be scalar"));
+        }
+
+        for _ in 0..self.max_steps {
+            let (curr_grad, curr_hessian, curr_d3_tensor) = derivative_tensors_123(function, &x);
+
+            // Check for stop condition
+            if let Some(gtol) = self.gtol {
+                if curr_grad.norm().double_value(&[]) < gtol {
+                    return Ok(x);
+                }
+            } else {
+                // This check is necessary. Continuation of the algorithm
+                // with gradient equal to exactly zero leads to NaN appearing
+                // in the result.
+                if curr_grad.norm().double_value(&[]) == 0. {
+                    return Ok(x);
+                }
+            }
+
+            // Calculate step direction
+            let hessian_pinv = curr_hessian.linalg_pinv(1e-14, false);
+            let neg_newton_dir = hessian_pinv.mm(&curr_grad.unsqueeze(1));
+            let direction = -hessian_pinv.mm(&(curr_grad.unsqueeze(1) + curr_d3_tensor.matmul(&neg_newton_dir).squeeze().mm(&neg_newton_dir)*0.5)).squeeze();
+
+            // Choose optimal step in given direction using line search
+            let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9);
+
+            // Apply step
+            x = x + &step;
+
+            // Check for stop contition
+            let y = function(&x);
+            if let Some(ftol) = self.ftol {
+                if (curr_y.double_value(&[]) - y.double_value(&[])) < ftol {
+                    return Ok(x);
+                }
+            }
+            curr_y = y;
+        }
+
+        Ok(x)
+    }
+}
+
+impl fmt::Display for Halley {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut string = String::from("Halley(");
 
         string = string + "max_steps=" + self.max_steps.to_string().as_str();
         if let Some(gtol) = self.gtol {
