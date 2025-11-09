@@ -128,6 +128,14 @@ fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Te
     // create_graph = true (allow calculating second derivatives)
     let grad = Tensor::run_backward(&[y], &[&x_with_grad], true, true)[0].copy();
     let grad_len = grad.size()[0];
+    let grad_kind = grad.kind();
+    let grad_device = grad.device();
+
+    // If gradient is constant, immediately return gradient and zero hessian
+    // It is not possible to differentiate constants in torch
+    if !grad.requires_grad() {
+        return (grad, Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)));
+    }
 
     let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
     for i in 0..grad_len {
@@ -156,7 +164,7 @@ fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Te
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian, d3_tensor)`, both detached tensors. `grad` is 1D, `hessian` is 2D, `d3_tensor` is 3D.
-pub fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
+fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
@@ -164,6 +172,19 @@ pub fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) 
     // create_graph = true (allow calculating second derivatives)
     let grad = Tensor::run_backward(&[y], &[&x_with_grad], true, true)[0].copy();
     let grad_len = grad.size()[0];
+    let grad_kind = grad.kind();
+    let grad_device = grad.device();
+
+    // If gradient is constant, immediately return gradient zero hessian and
+    // zero tensor of third order derivatives
+    // It is not possible to differentiate constants in torch
+    if !grad.requires_grad() {
+        return (
+            grad,
+            Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
+            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
+        );
+    }
 
     let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
     for i in 0..grad_len {
@@ -177,12 +198,26 @@ pub fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) 
         ));
     }
 
+    // Stack slices of the Hessian matrix
+    let hessian = Tensor::stack(&vectors, 0);
+
+    // If gradient is constant, immediately return gradient zero hessian and
+    // zero tensor of third order derivatives
+    // It is not possible to differentiate constants in torch
+    if !hessian.requires_grad() {
+        return (
+            grad,
+            hessian,
+            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
+        );
+    }
+
     let mut vectors2 = Vec::<Tensor>::with_capacity(grad_len as usize);
     for i in 0..grad_len {
         let mut vectors1 = Vec::<Tensor>::with_capacity(grad_len as usize);
         for j in 0..grad_len {
             vectors1.append(&mut Tensor::run_backward(
-                &[vectors[i as usize].i(j)],
+                &[hessian.i((i, j))],
                 &[&x_with_grad],
                 true,
                 false,
@@ -193,8 +228,7 @@ pub fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) 
 
     // Detach autograd computation graph
     let grad = grad.detach();
-    // Stack slices of the Hessian matrix and detach autograd computation graph
-    let hessian = Tensor::stack(&vectors, 0).detach();
+    let hessian = hessian.detach();
     // Stack slices of the tensor of third derivatives and detach autograd computation graph
     let d3_tensor = Tensor::stack(&vectors2, 0).detach();
 
