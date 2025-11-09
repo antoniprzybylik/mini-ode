@@ -106,7 +106,7 @@ pub struct CG {
 ///
 /// # Returns
 /// Gradient tensor at `x`.
-fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
+pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
@@ -120,7 +120,7 @@ fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian)`, both detached tensors. `grad` is 1D, `hessian` is 2D.
-fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor) {
+pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor) {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
@@ -164,7 +164,7 @@ fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Te
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian, d3_tensor)`, both detached tensors. `grad` is 1D, `hessian` is 2D, `d3_tensor` is 3D.
-fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
+pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
