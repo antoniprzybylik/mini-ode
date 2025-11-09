@@ -327,7 +327,7 @@ fn choose_step_backtracking(
 
     let mut t = 1f64;
     while function(&(x0 + direction * t)).double_value(&[])
-        > fx0 + grad.squeeze().dot(&direction.squeeze()).double_value(&[]) * alpha * t
+        > fx0 + grad.reshape([-1]).dot(&direction.reshape([-1])).double_value(&[]) * alpha * t
     {
         t *= beta;
     }
@@ -395,14 +395,14 @@ impl Optimizer for CG {
             let direction = match step_num {
                 0 => -&grad,
                 _ => {
-                    let orthogonality_measure = grad.squeeze().dot(&prev_grad.squeeze()).abs()
-                        / grad.squeeze().dot(&grad.squeeze());
+                    let orthogonality_measure = grad.reshape([-1]).dot(&prev_grad.reshape([-1])).abs()
+                        / grad.reshape([-1]).dot(&grad.reshape([-1]));
                     if orthogonality_measure.double_value(&[]) > 0.2 {
                         // Restart
                         -&grad
                     } else {
-                        let beta = grad.squeeze().dot(&(&grad - &prev_grad).squeeze())
-                            / prev_grad.squeeze().dot(&prev_grad.squeeze());
+                        let beta = grad.reshape([-1]).dot(&(&grad - &prev_grad).reshape([-1]))
+                            / prev_grad.reshape([-1]).dot(&prev_grad.reshape([-1]));
                         // Clamp beta to be nonnegative (PR+)
                         let beta = if beta.double_value(&[]) > 0. {
                             beta
@@ -550,7 +550,7 @@ impl Optimizer for BFGS {
             }
 
             // Calculate step direction base on the gradient and approximate hessian
-            let direction = (-appr_inv_h.mm(&curr_grad.unsqueeze(1))).squeeze();
+            let direction = (-appr_inv_h.mm(&curr_grad.reshape([-1, 1]))).reshape([-1]);
 
             // Calculate linesearch_atol based on previous step norms
             let linesearch_atol =
@@ -723,7 +723,7 @@ impl Optimizer for Newton {
             }
 
             // Calculate step direction
-            let negative_grad = -curr_grad.unsqueeze(1); // Negative gradient direction
+            let negative_grad = -curr_grad.reshape([-1, 1]); // Negative gradient direction
             let mut lambda = (negative_grad.norm().double_value(&[]) * 1e-3).max(1e-8); // Initial dampening factor
             let direction = loop {
                 // We damp hessian until it is positive definite.
@@ -744,7 +744,7 @@ impl Optimizer for Newton {
                         break lower_triangular
                             .transpose(0, 1)
                             .linalg_solve_triangular(&y, true, true, false)
-                            .squeeze();
+                            .reshape([-1]);
                     }
                     Err(_) => {
                         // Hessian is not positive-definite. Try increasing dampening factor.
@@ -754,7 +754,7 @@ impl Optimizer for Newton {
                             break curr_hessian
                                 .linalg_pinv(1e-14, false)
                                 .mm(&negative_grad)
-                                .squeeze();
+                                .reshape([-1]);
                         }
                     }
                 }
@@ -877,8 +877,8 @@ impl Optimizer for Halley {
 
             // Calculate step direction
             let hessian_pinv = curr_hessian.linalg_pinv(1e-14, false);
-            let neg_newton_dir = hessian_pinv.mm(&curr_grad.unsqueeze(1));
-            let direction = -hessian_pinv.mm(&(curr_grad.unsqueeze(1) + curr_d3_tensor.matmul(&neg_newton_dir).squeeze().mm(&neg_newton_dir)*0.5)).squeeze();
+            let neg_newton_dir = hessian_pinv.mm(&curr_grad.reshape([-1, 1]));
+            let direction = -hessian_pinv.mm(&(curr_grad.reshape([-1, 1]) + curr_d3_tensor.matmul(&neg_newton_dir).reshape([x0_length, x0_length]).mm(&neg_newton_dir)*0.5)).reshape([-1]);
 
             // Choose optimal step in given direction using line search
             let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9);
