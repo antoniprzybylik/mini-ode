@@ -268,14 +268,21 @@ fn choose_step_golden_section(
     x1 = 0.;
     // Heuristics: Try to set x2 based on atol value. If we succeed, we can
     //             skip some forward search iterations.
-    x2 = if function(&(x0 + direction * atol * 15.)).double_value(&[]) <= fx1 {
-        atol * 15.
-    } else {
+    let fx_guess = function(&(x0 + direction * atol * 15.)).double_value(&[]);
+    x2 =  if !fx_guess.is_finite() || fx_guess > fx1 {
         P0
+    } else {
+        atol * 15.
     };
     // Forward search
-    while function(&(x0 + direction * x2)).double_value(&[]) <= fx1 {
-        x2 = &x1 + (&x2 - &x1) * PHI2;
+    let mut fx = function(&(x0 + direction * x2)).double_value(&[]);
+    while fx <= fx1 {
+        let new_x2 = x1 + (x2 - x1) * PHI2;
+        fx = function(&(x0 + direction * new_x2)).double_value(&[]);
+        if !fx.is_finite() {
+            break;
+        }
+        x2 = new_x2;
     }
 
     x3 = x2 - (x2 - x1) * RPHI;
@@ -326,8 +333,15 @@ fn choose_step_backtracking(
     let fx0 = function(&x0).double_value(&[]);
 
     let mut t = 1f64;
-    while function(&(x0 + direction * t)).double_value(&[])
-        > fx0 + grad.reshape([-1]).dot(&direction.reshape([-1])).double_value(&[]) * alpha * t
+    while {
+        let fx = function(&(x0 + direction * t)).double_value(&[]);
+
+        if !fx.is_finite() {
+            true
+        } else {
+            fx > fx0 + grad.reshape([-1]).dot(&direction.reshape([-1])).double_value(&[]) * alpha * t
+        }
+    }
     {
         t *= beta;
     }
