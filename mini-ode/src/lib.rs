@@ -42,18 +42,56 @@ impl Solver {
         x_span: (f64, f64),
         y0: Tensor,
     ) -> anyhow::Result<(Tensor, Tensor)> {
-        if y0.size().len() != 1 {
+        let kind = y0.kind();
+        let device = y0.device();
+
+        // Validate y0
+        let y0_size = y0.size();
+        if y0_size.len() != 1 {
             return Err(anyhow!(
                 "y0 must be a one-dimensional tensor but it has {} dimensions",
-                y0.size().len()
+                y0_size.len()
             ));
         }
-        if y0.kind() != tch::Kind::Double
-            && y0.kind() != tch::Kind::Float
-            && y0.kind() != tch::Kind::BFloat16
-            && y0.kind() != tch::Kind::Half
+        if kind != tch::Kind::Double
+            && kind != tch::Kind::Float
+            && kind != tch::Kind::BFloat16
+            && kind != tch::Kind::Half
         {
             return Err(anyhow!("y0 is of unsupported kind {:?}", y0.kind()));
+        }
+
+        // Validate function f
+        let dy = f.forward_ts(&[
+            Tensor::from(x_span.0).to_kind(kind).to_device(device),
+            y0.copy(),
+        ])?;
+        let dy_size = dy.size();
+        if dy_size.len() != 1 {
+            return Err(anyhow!(
+                "Function `f` returns tensor of rank {}, expected one-dimensional tensor",
+                dy_size.len()
+            ));
+        }
+        if dy_size[0] != y0_size[0] {
+            return Err(anyhow!(
+                "Function `f` returns vector of length {}, expected vector of length {} (same as y0)",
+                dy_size[0], y0_size[0]
+            ));
+        }
+        let dy_device = dy.device();
+        if dy_device != device {
+            return Err(anyhow!(
+                "Function `f` returns tensor on device {:?}, expected tensor to be on device {:?} (same as y0)",
+                dy_device, device
+            ));
+        }
+        let dy_kind = dy.kind();
+        if dy_kind != kind {
+            return Err(anyhow!(
+                "Function `f` returns tensor of kind {:?}, expected tensor to be of kind {:?} (same as y0)",
+                dy_kind, kind
+            ));
         }
 
         match self {
@@ -132,11 +170,18 @@ fn solve_euler(
             Tensor::from(x).to_kind(kind).to_device(device),
             y.squeeze().copy(),
         ])?;
-        let dy_rank = dy.size().len();
+        let dy_size = dy.size();
+        let dy_rank = dy_size.len();
         if dy_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 dy_rank
+            );
+        }
+        if dy_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                dy_size[0]
             );
         }
 
@@ -183,11 +228,18 @@ fn solve_rk4(
             Tensor::from(x).to_kind(kind).to_device(device),
             y.squeeze().copy(),
         ])?;
-        let k1_rank = k1.size().len();
+        let k1_size = k1.size();
+        let k1_rank = k1_size.len();
         if k1_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 k1_rank
+            );
+        }
+        if k1_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k1_size[0]
             );
         }
 
@@ -197,11 +249,18 @@ fn solve_rk4(
             Tensor::from(x_half).to_kind(kind).to_device(device),
             y_half.squeeze(),
         ])?;
-        let k2_rank = k2.size().len();
+        let k2_size = k2.size();
+        let k2_rank = k2_size.len();
         if k2_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 k2_rank
+            );
+        }
+        if k2_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k2_size[0]
             );
         }
 
@@ -211,11 +270,18 @@ fn solve_rk4(
             Tensor::from(x_half_again).to_kind(kind).to_device(device),
             y_half_again.squeeze(),
         ])?;
-        let k3_rank = k3.size().len();
+        let k3_size = k3.size();
+        let k3_rank = k3_size.len();
         if k3_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 k3_rank
+            );
+        }
+        if k3_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k3_size[0]
             );
         }
 
@@ -225,11 +291,18 @@ fn solve_rk4(
             Tensor::from(x_full).to_kind(kind).to_device(device),
             y_full.squeeze(),
         ])?;
-        let k4_rank = k4.size().len();
+        let k4_size = k4.size();
+        let k4_rank = k4_size.len();
         if k4_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 k4_rank
+            );
+        }
+        if k4_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k4_size[0]
             );
         }
 
@@ -344,9 +417,19 @@ fn solve_glrk4(
             Tensor::from(x).to_kind(kind).to_device(device),
             y.squeeze().copy(),
         ])?;
-        let k_rank = k.size().len();
+        let k_size = k.size();
+        let k_rank = k_size.len();
         if k_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k_rank);
+            anyhow::bail!(
+                "Derivative CModule returned tensor of bad rank {}.",
+                k_rank
+            );
+        }
+        if k_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k_size[0]
+            );
         }
 
         const C1: f64 = 0.2113248654f64;
@@ -452,11 +535,18 @@ fn solve_rkf45(
             Tensor::from(x).to_kind(kind).to_device(device),
             y.squeeze().copy(),
         ])?;
-        let k1_rank = k1.size().len();
+        let k1_size = k1.size();
+        let k1_rank = k1_size.len();
         if k1_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 k1_rank
+            );
+        }
+        if k1_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                k1_size[0]
             );
         }
 
@@ -467,11 +557,18 @@ fn solve_rkf45(
                 Tensor::from(x_step).to_kind(kind).to_device(device),
                 y_step.squeeze(),
             ])?;
-            let k2_rank = k2_unchecked.size().len();
+            let k2_size = k2_unchecked.size();
+            let k2_rank = k2_size.len();
             if k2_rank != 1 {
                 anyhow::bail!(
                     "Derivative CModule returned tensor of bad rank {}.",
                     k2_rank
+                );
+            }
+            if k2_size[0] != y0.size()[0] {
+                anyhow::bail!(
+                    "Derivative CModule returned vector of bad length {}.",
+                    k2_size[0]
                 );
             }
 
@@ -485,11 +582,18 @@ fn solve_rkf45(
                 Tensor::from(x_step).to_kind(kind).to_device(device),
                 y_step.squeeze(),
             ])?;
-            let k3_rank = k3_unchecked.size().len();
+            let k3_size = k3_unchecked.size();
+            let k3_rank = k3_size.len();
             if k3_rank != 1 {
                 anyhow::bail!(
                     "Derivative CModule returned tensor of bad rank {}.",
                     k3_rank
+                );
+            }
+            if k3_size[0] != y0.size()[0] {
+                anyhow::bail!(
+                    "Derivative CModule returned vector of bad length {}.",
+                    k3_size[0]
                 );
             }
 
@@ -506,11 +610,18 @@ fn solve_rkf45(
                 Tensor::from(x_step).to_kind(kind).to_device(device),
                 y_step.squeeze(),
             ])?;
-            let k4_rank = k4_unchecked.size().len();
+            let k4_size = k4_unchecked.size();
+            let k4_rank = k4_size.len();
             if k4_rank != 1 {
                 anyhow::bail!(
                     "Derivative CModule returned tensor of bad rank {}.",
                     k4_rank
+                );
+            }
+            if k4_size[0] != y0.size()[0] {
+                anyhow::bail!(
+                    "Derivative CModule returned vector of bad length {}.",
+                    k4_size[0]
                 );
             }
 
@@ -528,11 +639,18 @@ fn solve_rkf45(
                 Tensor::from(x_step).to_kind(kind).to_device(device),
                 y_step.squeeze(),
             ])?;
-            let k5_rank = k5_unchecked.size().len();
+            let k5_size = k5_unchecked.size();
+            let k5_rank = k5_size.len();
             if k5_rank != 1 {
                 anyhow::bail!(
                     "Derivative CModule returned tensor of bad rank {}.",
                     k5_rank
+                );
+            }
+            if k5_size[0] != y0.size()[0] {
+                anyhow::bail!(
+                    "Derivative CModule returned vector of bad length {}.",
+                    k5_size[0]
                 );
             }
 
@@ -551,11 +669,18 @@ fn solve_rkf45(
                 Tensor::from(x_step).to_kind(kind).to_device(device),
                 y_step.squeeze(),
             ])?;
-            let k6_rank = k6_unchecked.size().len();
+            let k6_size = k6_unchecked.size();
+            let k6_rank = k6_size.len();
             if k6_rank != 1 {
                 anyhow::bail!(
                     "Derivative CModule returned tensor of bad rank {}.",
                     k6_rank
+                );
+            }
+            if k6_size[0] != y0.size()[0] {
+                anyhow::bail!(
+                    "Derivative CModule returned vector of bad length {}.",
+                    k6_size[0]
                 );
             }
 
@@ -653,11 +778,18 @@ fn solve_row1(
             Tensor::from(x_prev).to_kind(kind).to_device(device),
             y_prev.copy(),
         ])?;
-        let f_current_rank = f_current.size().len();
+        let f_current_size = f_current.size();
+        let f_current_rank = f_current_size.len();
         if f_current_rank != 1 {
             anyhow::bail!(
                 "Derivative CModule returned tensor of bad rank {}.",
                 f_current_rank
+            );
+        }
+        if f_current_size[0] != y0.size()[0] {
+            anyhow::bail!(
+                "Derivative CModule returned vector of bad length {}.",
+                f_current_size[0]
             );
         }
 
