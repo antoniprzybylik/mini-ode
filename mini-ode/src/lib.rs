@@ -154,7 +154,7 @@ fn solve_euler(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -168,7 +168,7 @@ fn solve_euler(
 
         let dy = f.forward_ts(&[
             Tensor::from(x).to_kind(kind).to_device(device),
-            y.squeeze().copy(),
+            y.copy(),
         ])?;
         let dy_size = dy.size();
         let dy_rank = dy_size.len();
@@ -194,7 +194,7 @@ fn solve_euler(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -212,7 +212,7 @@ fn solve_rk4(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -226,7 +226,7 @@ fn solve_rk4(
 
         let k1 = f.forward_ts(&[
             Tensor::from(x).to_kind(kind).to_device(device),
-            y.squeeze().copy(),
+            y.copy(),
         ])?;
         let k1_size = k1.size();
         let k1_rank = k1_size.len();
@@ -247,7 +247,7 @@ fn solve_rk4(
         let y_half: Tensor = &y + 0.5 * current_step * &k1;
         let k2 = f.forward_ts(&[
             Tensor::from(x_half).to_kind(kind).to_device(device),
-            y_half.squeeze(),
+            y_half,
         ])?;
         let k2_size = k2.size();
         let k2_rank = k2_size.len();
@@ -268,7 +268,7 @@ fn solve_rk4(
         let y_half_again: Tensor = &y + 0.5 * current_step * &k2;
         let k3 = f.forward_ts(&[
             Tensor::from(x_half_again).to_kind(kind).to_device(device),
-            y_half_again.squeeze(),
+            y_half_again,
         ])?;
         let k3_size = k3.size();
         let k3_rank = k3_size.len();
@@ -289,7 +289,7 @@ fn solve_rk4(
         let y_full = &y + current_step * &k3;
         let k4 = f.forward_ts(&[
             Tensor::from(x_full).to_kind(kind).to_device(device),
-            y_full.squeeze(),
+            y_full,
         ])?;
         let k4_size = k4.size();
         let k4_rank = k4_size.len();
@@ -318,7 +318,7 @@ fn solve_rk4(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -337,7 +337,7 @@ fn solve_implicit_euler(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -358,22 +358,22 @@ fn solve_implicit_euler(
                     let f_next = f
                         .forward_ts(&[
                             Tensor::from(x_next).to_kind(kind).to_device(device),
-                            y_next.squeeze().copy(),
+                            y_next.copy(),
                         ])
                         .unwrap();
-                    let y_pred = &y_prev.squeeze() + current_step * &f_next;
+                    let y_pred = &y_prev + current_step * &f_next;
                     (y_next - &y_pred).pow_tensor_scalar(2).sum(y_next.kind())
                 },
-                &(&y_prev.detach().squeeze()
+                &(&y_prev.detach()
                     + current_step
                         * f.forward_ts(&[
                             &Tensor::from(x).to_kind(kind).to_device(device),
-                            &y_prev.squeeze(),
+                            &y_prev,
                         ])?),
             )
             .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
-        y = y_next.unsqueeze(0);
+        y = y_next.copy();
         x = x_next;
 
         all_x.push(x);
@@ -382,7 +382,7 @@ fn solve_implicit_euler(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -401,7 +401,7 @@ fn solve_glrk4(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -415,7 +415,7 @@ fn solve_glrk4(
 
         let k = f.forward_ts(&[
             Tensor::from(x).to_kind(kind).to_device(device),
-            y.squeeze().copy(),
+            y.copy(),
         ])?;
         let k_size = k.size();
         let k_rank = k_size.len();
@@ -445,13 +445,13 @@ fn solve_glrk4(
                     Tensor::from(x + C1 * current_step)
                         .to_kind(kind)
                         .to_device(device),
-                    &y.squeeze() + C1 * current_step * &k,
+                    &y + C1 * current_step * &k,
                 ])?,
                 f.forward_ts(&[
                     Tensor::from(x + C2 * current_step)
                         .to_kind(kind)
                         .to_device(device),
-                    &y.squeeze() + C2 * current_step * &k,
+                    &y + C2 * current_step * &k,
                 ])?,
             ],
             0,
@@ -464,7 +464,7 @@ fn solve_glrk4(
                             Tensor::from(x + C1 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
-                            &y.squeeze()
+                            &y
                                 + (A11 * k1k2_guess.i(0..=1) + A12 * k1k2_guess.i(2..=3))
                                     * current_step,
                         ])
@@ -474,7 +474,7 @@ fn solve_glrk4(
                             Tensor::from(x + C2 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
-                            &y.squeeze()
+                            &y
                                 + (A21 * k1k2_guess.i(0..=1) + A22 * k1k2_guess.i(2..=3))
                                     * current_step,
                         ])
@@ -497,7 +497,7 @@ fn solve_glrk4(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -518,7 +518,7 @@ fn solve_rkf45(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -533,7 +533,7 @@ fn solve_rkf45(
 
         let k1 = f.forward_ts(&[
             Tensor::from(x).to_kind(kind).to_device(device),
-            y.squeeze().copy(),
+            y.copy(),
         ])?;
         let k1_size = k1.size();
         let k1_rank = k1_size.len();
@@ -555,7 +555,7 @@ fn solve_rkf45(
             let y_step: Tensor = &y + 0.25 * &step * &k1;
             let k2_unchecked = f.forward_ts(&[
                 Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step.squeeze(),
+                y_step,
             ])?;
             let k2_size = k2_unchecked.size();
             let k2_rank = k2_size.len();
@@ -580,7 +580,7 @@ fn solve_rkf45(
             let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
             let k3_unchecked = f.forward_ts(&[
                 Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step.squeeze(),
+                y_step,
             ])?;
             let k3_size = k3_unchecked.size();
             let k3_rank = k3_size.len();
@@ -608,7 +608,7 @@ fn solve_rkf45(
                 + (7296.0 / 2197.0 * &step * &k3);
             let k4_unchecked = f.forward_ts(&[
                 Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step.squeeze(),
+                y_step,
             ])?;
             let k4_size = k4_unchecked.size();
             let k4_rank = k4_size.len();
@@ -637,7 +637,7 @@ fn solve_rkf45(
                 + (-845.0 / 4104.0 * &step * &k4);
             let k5_unchecked = f.forward_ts(&[
                 Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step.squeeze(),
+                y_step,
             ])?;
             let k5_size = k5_unchecked.size();
             let k5_rank = k5_size.len();
@@ -667,7 +667,7 @@ fn solve_rkf45(
                 + (-11.0 / 40.0 * &step * &k5);
             let k6_unchecked = f.forward_ts(&[
                 Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step.squeeze(),
+                y_step,
             ])?;
             let k6_size = k6_unchecked.size();
             let k6_rank = k6_size.len();
@@ -730,7 +730,7 @@ fn solve_rkf45(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -748,7 +748,7 @@ fn solve_row1(
     let x_end = x_span.1;
 
     let mut x = x_start;
-    let mut y = y0.unsqueeze(0);
+    let mut y = y0.copy();
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -761,7 +761,7 @@ fn solve_row1(
         }
 
         let x_prev = x;
-        let y_prev = y.copy().squeeze();
+        let y_prev = y.copy();
 
         let jacobian = compute_jacobian(
             |y| {
@@ -770,7 +770,6 @@ fn solve_row1(
                     y.copy(),
                 ])
                 .unwrap()
-                .squeeze()
             },
             &y_prev,
         );
@@ -802,7 +801,7 @@ fn solve_row1(
         let y_next = y_prev + current_step * delta_y;
 
         x = &x_prev + current_step;
-        y = y_next.unsqueeze(0);
+        y = y_next.copy();
 
         all_x.push(x);
         all_y.push(y.copy());
@@ -810,7 +809,7 @@ fn solve_row1(
 
     Ok((
         Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::cat(&all_y, 0),
+        Tensor::stack(&all_y, 0),
     ))
 }
 
@@ -830,9 +829,9 @@ where
     for i in 0..y_size {
         let yi = y.i(i);
         let grad = Tensor::run_backward(&[yi], &[&x_with_grad], true, false)[0].copy();
-        grads.push(grad.unsqueeze(0));
+        grads.push(grad);
         x_with_grad.zero_grad();
     }
 
-    Tensor::cat(&grads, 0)
+    Tensor::stack(&grads, 0)
 }
