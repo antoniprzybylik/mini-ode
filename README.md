@@ -50,10 +50,18 @@ LIBTORCH_USE_PYTORCH=1 maturin develop
 
 To use `mini-ode` from Python:
 
-1. Define the derivative function using `torch.Tensor` inputs.
-2. **Trace** the function using `torch.jit.trace`.
-3. Pass the traced function and initial conditions to a solver instance.
-4. For implicit solvers, pass an optimizer at construction.
+1. Define the derivative function `f(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor`:
+   - `x` is a scalar tensor (rank 0, shape `()`).
+   - `y` is a 1D tensor (rank 1, shape `(n,)` where `n` is the dimension of the state vector).
+   - The function must return a 1D tensor of the same shape as `y` (i.e., `(n,)`).
+2. **Trace** the function using `torch.jit.trace` to convert it to TorchScript. Provide example inputs matching the shapes (e.g., `torch.tensor(0.)` for `x` and `torch.tensor([0.] * n)` for `y`).
+3. Create a solver instance, configuring parameters like step size or optimizer as needed.
+4. Call `solver.solve(traced_f, x_span, y0)`:
+   - `x_span`: A tuple `(start, end)` for the integration interval.
+   - `y0`: Initial state as a 1D tensor (shape `(n,)`).
+   - Returns: `(xs, ys)` where `xs` is a 1D tensor of x-values (shape `(num_points,)`), and `ys` is a 2D tensor of y-values (shape `(num_points, n)`).
+     - For fixed-step solvers, `xs` is evenly spaced (e.g., via `torch.linspace`).
+     - For adaptive-step solvers, `xs` has a variable number of points based on error control.
 
 Example usage flow (not full code):
 
