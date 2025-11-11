@@ -402,6 +402,7 @@ fn solve_glrk4(
 
     let mut x = x_start;
     let mut y = y0.copy();
+    let y_length = y.size()[0];
 
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
@@ -459,23 +460,23 @@ fn solve_glrk4(
         let k1k2 = optimizer
             .optimize(
                 &|k1k2_guess| {
-                    let diff1 = k1k2_guess.i(0..=1)
+                    let diff1 = k1k2_guess.i(0..y_length)
                         - f.forward_ts(&[
                             Tensor::from(x + C1 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
                             &y
-                                + (A11 * k1k2_guess.i(0..=1) + A12 * k1k2_guess.i(2..=3))
+                                + (A11 * k1k2_guess.i(0..y_length) + A12 * k1k2_guess.i(y_length..2*y_length))
                                     * current_step,
                         ])
                         .unwrap();
-                    let diff2 = k1k2_guess.i(2..=3)
+                    let diff2 = k1k2_guess.i(y_length..2*y_length)
                         - f.forward_ts(&[
                             Tensor::from(x + C2 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
                             &y
-                                + (A21 * k1k2_guess.i(0..=1) + A22 * k1k2_guess.i(2..=3))
+                                + (A21 * k1k2_guess.i(0..y_length) + A22 * k1k2_guess.i(y_length..2*y_length))
                                     * current_step,
                         ])
                         .unwrap();
@@ -485,11 +486,9 @@ fn solve_glrk4(
                 &first_k1k2_guess,
             )
             .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
-        assert!(k1k2.size().len() == 1);
-        assert!(k1k2.size()[0] == 4);
 
         x = x + current_step;
-        y = &y + current_step * (0.5 * k1k2.i(0..=1) + 0.5 * k1k2.i(2..=3));
+        y = &y + current_step * (0.5 * k1k2.i(0..y_length) + 0.5 * k1k2.i(y_length..2*y_length));
 
         all_x.push(x);
         all_y.push(y.copy());
