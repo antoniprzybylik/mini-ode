@@ -4,6 +4,26 @@ This documents the main changes in the `mini-ode` project.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-11-12
+### Added
+- Newton and Halley's method optimizers.
+- Implicit constraints handling in optimizers.
+- Attribute getters for solvers in the Python package.
+- Typing information for the mini-ode Python package.
+- Comprehensive unit tests for ODE solvers and the Python module.
+
+### Changed
+- Switched to PR+ formula with beta clamping in the Conjugate Gradient optimizer.
+- Dynamic calculation of line search tolerance (`linesearch_atol`) in optimizers.
+- Improved numerical stability in `choose_step_golden_section` by using 64-bit floats.
+- Added heuristics to speed up forward search `choose_step_golden_section`.
+- GLRK4 solver now supports arbitrary state vector sizes (previously it only supported two dimensional state).
+
+### Fixed
+- Bug in Conjugate Gradient optimizer restart mechanism.
+- Tensor shape handling issues in ODE solvers (by replacing squeeze/unsqueeze with reshape).
+- Errors in higher derivatives computation that caused torch panic.
+
 ## [0.1.3] - 2025-10-26
 ### Added
 - `std::fmt::Display` trait implementations for optimizers and solvers in `mini-ode` Rust crate.
