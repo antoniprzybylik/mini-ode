@@ -32,23 +32,34 @@ attributes = [
 def test_euler_dir_attribute():
     solver = mini_ode.EulerMethodSolver(step=0.1)
     assert solver.__dir__() == attributes+["step"]
+    assert solver.step == 0.1
 
 def test_rk4_dir_attribute():
     solver = mini_ode.RK4MethodSolver(step=0.1)
     assert solver.__dir__() == attributes+["step"]
+    assert solver.step == 0.1
 
 def test_implicit_euler_dir_attribute():
     solver = mini_ode.ImplicitEulerMethodSolver(step=0.1, optimizer=mini_ode.optimizers.Newton(max_steps=10))
     assert solver.__dir__() == attributes+["step", "optimizer"]
+    assert solver.step == 0.1
+    assert isinstance(solver.optimizer, mini_ode.optimizers.Optimizer)
 
 def test_glrk4_dir_attribute():
     solver = mini_ode.GLRK4MethodSolver(step=0.1, optimizer=mini_ode.optimizers.Newton(max_steps=10))
     assert solver.__dir__() == attributes+["step", "optimizer"]
+    assert solver.step == 0.1
+    assert isinstance(solver.optimizer, mini_ode.optimizers.Optimizer)
 
 def test_rkf45_dir_attribute():
     solver = mini_ode.RKF45MethodSolver(rtol=1., atol=1., min_step=1., safety_factor=1.)
     assert solver.__dir__() == attributes+["rtol", "atol", "min_step", "safety_factor"]
+    assert solver.rtol == 1.
+    assert solver.atol == 1.
+    assert solver.min_step == 1.
+    assert solver.safety_factor == 1.
 
 def test_row1_dir_attribute():
     solver = mini_ode.ROW1MethodSolver(step=0.1)
     assert solver.__dir__() == attributes+["step"]
+    assert solver.step == 0.1
