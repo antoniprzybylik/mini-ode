@@ -106,11 +106,19 @@ pub struct CG {
 ///
 /// # Returns
 /// Gradient tensor at `x`.
-pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Tensor {
+pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<Tensor, String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
-    tch::Tensor::run_backward(&[y], &[x_with_grad], false, false)[0].copy()
+    if y.size() != [] as [i64; 0] {
+        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+    }
+
+    if !y.requires_grad() {
+        return Ok(tch::Tensor::zeros(x.size(), (x.kind(), x.device())));
+    }
+
+    Ok(tch::Tensor::run_backward(&[y], &[x_with_grad], false, false)[0].copy())
 }
 
 /// Computes the gradient and Hessian of `function` at `x` using automatic differentiation.
@@ -120,9 +128,20 @@ pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) ->
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian)`, both detached tensors. `grad` is 1D, `hessian` is 2D.
-pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor) {
+pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<(Tensor, Tensor), String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
+
+    if y.size() != [] as [i64; 0] {
+        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+    }
+
+    if !y.requires_grad() {
+        return Ok((
+            tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
+            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device()))
+        ));
+    }
 
     // keep_graph = true (this graph is needed for some functions during second differentiation)
     // create_graph = true (allow calculating second derivatives)
@@ -134,7 +153,7 @@ pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Ten
     // If gradient is constant, immediately return gradient and zero hessian
     // It is not possible to differentiate constants in torch
     if !grad.requires_grad() {
-        return (grad, Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)));
+        return Ok((grad, Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device))));
     }
 
     let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
@@ -154,7 +173,7 @@ pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Ten
     // Stack slices of the Hessian matrix and detach autograd computation graph
     let hessian = Tensor::stack(&vectors, 0).detach();
 
-    (grad, hessian)
+    Ok((grad, hessian))
 }
 
 /// Computes the gradient, Hessian and third derivatives tensor of `function` at `x` using automatic differentiation.
@@ -164,9 +183,21 @@ pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Ten
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian, d3_tensor)`, both detached tensors. `grad` is 1D, `hessian` is 2D, `d3_tensor` is 3D.
-pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> (Tensor, Tensor, Tensor) {
+pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<(Tensor, Tensor, Tensor), String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
+
+    if y.size() != [] as [i64; 0] {
+        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+    }
+
+    if !y.requires_grad() {
+        return Ok((
+            tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
+            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device())),
+            tch::Tensor::zeros([x.size()[0], x.size()[0], x.size()[0]], (x.kind(), x.device()))
+        ));
+    }
 
     // keep_graph = true (this graph is needed for some functions during second differentiation)
     // create_graph = true (allow calculating second derivatives)
@@ -179,11 +210,11 @@ pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &T
     // zero tensor of third order derivatives
     // It is not possible to differentiate constants in torch
     if !grad.requires_grad() {
-        return (
+        return Ok((
             grad,
             Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
             Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
-        );
+        ));
     }
 
     let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
@@ -205,11 +236,11 @@ pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &T
     // zero tensor of third order derivatives
     // It is not possible to differentiate constants in torch
     if !hessian.requires_grad() {
-        return (
+        return Ok((
             grad,
             hessian,
             Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
-        );
+        ));
     }
 
     let mut vectors2 = Vec::<Tensor>::with_capacity(grad_len as usize);
@@ -232,7 +263,7 @@ pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &T
     // Stack slices of the tensor of third derivatives and detach autograd computation graph
     let d3_tensor = Tensor::stack(&vectors2, 0).detach();
 
-    (grad, hessian, d3_tensor)
+    Ok((grad, hessian, d3_tensor))
 }
 
 /// Minimum step value.
@@ -389,7 +420,10 @@ impl Optimizer for CG {
         let mut x = x0.copy();
 
         for step_num in 0..self.max_steps {
-            let grad = differentiate(function, &x);
+            let grad = match differentiate(function, &x) {
+                Ok(grad) => grad,
+                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in CG optimizer: {}", e))
+            };
 
             // Stop if gradient is smaller than `gtol`
             if let Some(gtol) = self.gtol {
@@ -540,7 +574,10 @@ impl Optimizer for BFGS {
         };
         let mut x = x0.copy();
         let mut appr_inv_h = identity.copy();
-        let mut curr_grad = differentiate(function, &x);
+        let mut curr_grad = match differentiate(function, &x) {
+            Ok(grad) => grad,
+            Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in BFGS optimizer: {}", e))
+        };
         let mut curr_y = function(&x);
 
         // Ensure that output of `function` is a scalar
@@ -590,7 +627,10 @@ impl Optimizer for BFGS {
             }
             curr_y = y;
 
-            let grad = differentiate(function, &x);
+            let grad = match differentiate(function, &x) {
+                Ok(grad) => grad,
+                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in BFGS optimizer: {}", e))
+            };
             let gdiff = &grad - &curr_grad;
 
             // Use Powell's dampening for gamma computation
@@ -720,7 +760,10 @@ impl Optimizer for Newton {
         }
 
         for _ in 0..self.max_steps {
-            let (curr_grad, curr_hessian) = gradient_and_hessian(function, &x);
+            let (curr_grad, curr_hessian) = match gradient_and_hessian(function, &x) {
+                Ok(gh) => gh,
+                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in Newton optimizer: {}", e))
+            };
 
             // Check for stop condition
             if let Some(gtol) = self.gtol {
@@ -873,7 +916,10 @@ impl Optimizer for Halley {
         }
 
         for _ in 0..self.max_steps {
-            let (curr_grad, curr_hessian, curr_d3_tensor) = derivative_tensors_123(function, &x);
+            let (curr_grad, curr_hessian, curr_d3_tensor) = match derivative_tensors_123(function, &x) {
+                Ok(ghd3) => ghd3,
+                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in Halley optimizer: {}", e))
+            };
 
             // Check for stop condition
             if let Some(gtol) = self.gtol {
