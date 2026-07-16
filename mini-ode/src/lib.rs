@@ -45,7 +45,25 @@ impl Solver {
         let kind = y0.kind();
         let device = y0.device();
 
+        // Validate x_span
+        if !x_span.0.is_finite() || ! x_span.1.is_finite() {
+            return Err(anyhow!(
+                "x_span must consist of finite values"
+            ));
+        }
+        if x_span.0 > x_span.1 {
+            return Err(anyhow!(
+                "x_span is not a valid interval"
+            ));
+        }
+
         // Validate y0
+        if y0.isfinite().all().int64_value(&[]) == 0 {
+            return Err(anyhow!(
+                "y0 must consist of finite values"
+            ));
+        }
+        
         let y0_size = y0.size();
         if y0_size.len() != 1 {
             return Err(anyhow!(
