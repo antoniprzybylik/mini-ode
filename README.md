@@ -26,25 +26,64 @@ A minimalistic, multi-language library for solving Ordinary Differential Equatio
 
 ## 📦 Building the Library
 
-### Rust
+`mini-ode` can be built against two different libtorch installations:
 
-To build the core Rust library:
+- a system-installed libtorch, or
+- the libtorch bundled with a PyTorch installation.
+
+It is important that the headers used at compile time and the shared libraries loaded at runtime come from the same installation.
+
+### Rust (system libtorch)
+
+To build the Rust library against your system-installed libtorch:
 
 ```bash
 cd mini-ode
 cargo build --release
 ```
 
+This is the recommended approach if you are developing a pure Rust application.
+
 ### Python
 
-To build and install the Python package (in a virtual environment or Conda environment):
+To build the Python bindings using the PyTorch installation from your active Python environment:
 
 ```bash
 cd mini-ode-python
 LIBTORCH_USE_PYTORCH=1 maturin develop
 ```
 
-> This builds the Python bindings using [`maturin`](https://github.com/PyO3/maturin) and installs the package locally.
+This builds the Python bindings using [`maturin`](https://github.com/PyO3/maturin) and installs the package locally. `LIBTORCH_USE_PYTORCH=1` tells `torch-sys` to obtain the include directories and libraries from the currently active Python installation.
+
+### Building Rust code against a PyTorch installation
+
+If you want to build the Rust version of `mini-ode` against the libtorch that ships with your Conda or virtual environment PyTorch installation, you must configure both the compiler and the runtime linker.
+
+Using only
+
+```bash
+LIBTORCH_USE_PYTORCH=1 cargo build
+```
+
+is **not enough**.
+
+While this causes `torch-sys` to compile against the headers from your Python installation, system will typically still load the system libtorch (for example `/usr/lib/libtorch.so`) at runtime. Simply activating a Conda environment does not guarantee that the Conda libtorch will be used. Mixing the compile-time headers from one PyTorch installation with the runtime libraries from another would lead to runtime failures.
+
+Correct way to build and run:
+
+```bash
+export LIBTORCH_USE_PYTORCH=1
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib/python*/site-packages/torch/lib:$LD_LIBRARY_PATH"
+
+cargo build
+cargo run
+```
+
+This ensures that both the compiler and the runtime use the same libtorch installation.
+
+> **Tip**
+>
+> If your Rust code is loaded as a Python extension, importing `torch` before importing your extension ensures that Python has already loaded the correct libtorch libraries.
 
 ## 🐍 Python Usage Overview
 
