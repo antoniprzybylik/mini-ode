@@ -730,7 +730,7 @@ fn solve_rkf45(
                 return Err(anyhow!("Required step is smaller than minimal step"));
             }
         } else {
-            y = next_y4;
+            y = next_y5;
             x = &x + &step;
             all_x.push(x);
             all_y.push(y.copy());
