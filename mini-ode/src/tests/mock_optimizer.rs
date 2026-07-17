@@ -4,8 +4,7 @@ use tch::{Device, Kind, Tensor};
 pub struct MockOptimizer;
 
 impl crate::optimizers::Optimizer for MockOptimizer {
-    fn optimize(&self, _f: &dyn Fn(&Tensor) -> Tensor, _x0: &Tensor) -> anyhow::Result<Tensor>
-    {
+    fn optimize(&self, _f: &dyn Fn(&Tensor) -> Tensor, _x0: &Tensor) -> anyhow::Result<Tensor> {
         Ok(Tensor::zeros(&[1], (Kind::Float, Device::Cpu)))
     }
 }

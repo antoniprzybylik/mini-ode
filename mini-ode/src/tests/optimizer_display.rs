@@ -21,7 +21,10 @@ fn test_optimizer_display_cg_case3() {
 #[test]
 fn test_optimizer_display_cg_case4() {
     let optimizer = optimizers::CG::new(40, Some(4.5), Some(3.1));
-    assert_eq!(optimizer.to_string(), "CG(max_steps=40, gtol=4.5, ftol=3.1)");
+    assert_eq!(
+        optimizer.to_string(),
+        "CG(max_steps=40, gtol=4.5, ftol=3.1)"
+    );
 }
 
 #[test]
@@ -45,7 +48,10 @@ fn test_optimizer_display_newton_case3() {
 #[test]
 fn test_optimizer_display_newton_case4() {
     let optimizer = optimizers::Newton::new(40, Some(4.5), Some(3.1));
-    assert_eq!(optimizer.to_string(), "Newton(max_steps=40, gtol=4.5, ftol=3.1)");
+    assert_eq!(
+        optimizer.to_string(),
+        "Newton(max_steps=40, gtol=4.5, ftol=3.1)"
+    );
 }
 
 #[test]
@@ -69,7 +75,10 @@ fn test_optimizer_display_halley_case3() {
 #[test]
 fn test_optimizer_display_halley_case4() {
     let optimizer = optimizers::Halley::new(40, Some(4.5), Some(3.1));
-    assert_eq!(optimizer.to_string(), "Halley(max_steps=40, gtol=4.5, ftol=3.1)");
+    assert_eq!(
+        optimizer.to_string(),
+        "Halley(max_steps=40, gtol=4.5, ftol=3.1)"
+    );
 }
 
 #[test]
@@ -93,5 +102,8 @@ fn test_optimizer_display_bfgs_case3() {
 #[test]
 fn test_optimizer_display_bfgs_case4() {
     let optimizer = optimizers::BFGS::new(40, Some(4.5), Some(3.1));
-    assert_eq!(optimizer.to_string(), "BFGS(max_steps=40, gtol=4.5, ftol=3.1)");
+    assert_eq!(
+        optimizer.to_string(),
+        "BFGS(max_steps=40, gtol=4.5, ftol=3.1)"
+    );
 }

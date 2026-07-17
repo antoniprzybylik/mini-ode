@@ -46,24 +46,18 @@ impl Solver {
         let device = y0.device();
 
         // Validate x_span
-        if !x_span.0.is_finite() || ! x_span.1.is_finite() {
-            return Err(anyhow!(
-                "x_span must consist of finite values"
-            ));
+        if !x_span.0.is_finite() || !x_span.1.is_finite() {
+            return Err(anyhow!("x_span must consist of finite values"));
         }
         if x_span.0 > x_span.1 {
-            return Err(anyhow!(
-                "x_span is not a valid interval"
-            ));
+            return Err(anyhow!("x_span is not a valid interval"));
         }
 
         // Validate y0
         if y0.isfinite().all().int64_value(&[]) == 0 {
-            return Err(anyhow!(
-                "y0 must consist of finite values"
-            ));
+            return Err(anyhow!("y0 must consist of finite values"));
         }
-        
+
         let y0_size = y0.size();
         if y0_size.len() != 1 {
             return Err(anyhow!(
@@ -94,21 +88,24 @@ impl Solver {
         if dy_size[0] != y0_size[0] {
             return Err(anyhow!(
                 "Function `f` returns vector of length {}, expected vector of length {} (same as y0)",
-                dy_size[0], y0_size[0]
+                dy_size[0],
+                y0_size[0]
             ));
         }
         let dy_device = dy.device();
         if dy_device != device {
             return Err(anyhow!(
                 "Function `f` returns tensor on device {:?}, expected tensor to be on device {:?} (same as y0)",
-                dy_device, device
+                dy_device,
+                device
             ));
         }
         let dy_kind = dy.kind();
         if dy_kind != kind {
             return Err(anyhow!(
                 "Function `f` returns tensor of kind {:?}, expected tensor to be of kind {:?} (same as y0)",
-                dy_kind, kind
+                dy_kind,
+                kind
             ));
         }
 
@@ -184,10 +181,7 @@ fn solve_euler(
             current_step = remaining;
         }
 
-        let dy = f.forward_ts(&[
-            Tensor::from(x).to_kind(kind).to_device(device),
-            y.copy(),
-        ])?;
+        let dy = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
         let dy_size = dy.size();
         let dy_rank = dy_size.len();
         if dy_rank != 1 {
@@ -242,10 +236,7 @@ fn solve_rk4(
             current_step = remaining;
         }
 
-        let k1 = f.forward_ts(&[
-            Tensor::from(x).to_kind(kind).to_device(device),
-            y.copy(),
-        ])?;
+        let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
         let k1_size = k1.size();
         let k1_rank = k1_size.len();
         if k1_rank != 1 {
@@ -263,10 +254,7 @@ fn solve_rk4(
 
         let x_half = x + 0.5 * current_step;
         let y_half: Tensor = &y + 0.5 * current_step * &k1;
-        let k2 = f.forward_ts(&[
-            Tensor::from(x_half).to_kind(kind).to_device(device),
-            y_half,
-        ])?;
+        let k2 = f.forward_ts(&[Tensor::from(x_half).to_kind(kind).to_device(device), y_half])?;
         let k2_size = k2.size();
         let k2_rank = k2_size.len();
         if k2_rank != 1 {
@@ -305,10 +293,7 @@ fn solve_rk4(
 
         let x_full = x + current_step;
         let y_full = &y + current_step * &k3;
-        let k4 = f.forward_ts(&[
-            Tensor::from(x_full).to_kind(kind).to_device(device),
-            y_full,
-        ])?;
+        let k4 = f.forward_ts(&[Tensor::from(x_full).to_kind(kind).to_device(device), y_full])?;
         let k4_size = k4.size();
         let k4_rank = k4_size.len();
         if k4_rank != 1 {
@@ -432,17 +417,11 @@ fn solve_glrk4(
             current_step = remaining;
         }
 
-        let k = f.forward_ts(&[
-            Tensor::from(x).to_kind(kind).to_device(device),
-            y.copy(),
-        ])?;
+        let k = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
         let k_size = k.size();
         let k_rank = k_size.len();
         if k_rank != 1 {
-            anyhow::bail!(
-                "Derivative CModule returned tensor of bad rank {}.",
-                k_rank
-            );
+            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k_rank);
         }
         if k_size[0] != y0.size()[0] {
             anyhow::bail!(
@@ -483,19 +462,19 @@ fn solve_glrk4(
                             Tensor::from(x + C1 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
-                            &y
-                                + (A11 * k1k2_guess.i(0..y_length) + A12 * k1k2_guess.i(y_length..2*y_length))
-                                    * current_step,
+                            &y + (A11 * k1k2_guess.i(0..y_length)
+                                + A12 * k1k2_guess.i(y_length..2 * y_length))
+                                * current_step,
                         ])
                         .unwrap();
-                    let diff2 = k1k2_guess.i(y_length..2*y_length)
+                    let diff2 = k1k2_guess.i(y_length..2 * y_length)
                         - f.forward_ts(&[
                             Tensor::from(x + C2 * current_step)
                                 .to_kind(kind)
                                 .to_device(device),
-                            &y
-                                + (A21 * k1k2_guess.i(0..y_length) + A22 * k1k2_guess.i(y_length..2*y_length))
-                                    * current_step,
+                            &y + (A21 * k1k2_guess.i(0..y_length)
+                                + A22 * k1k2_guess.i(y_length..2 * y_length))
+                                * current_step,
                         ])
                         .unwrap();
 
@@ -506,7 +485,7 @@ fn solve_glrk4(
             .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
         x = x + current_step;
-        y = &y + current_step * (0.5 * k1k2.i(0..y_length) + 0.5 * k1k2.i(y_length..2*y_length));
+        y = &y + current_step * (0.5 * k1k2.i(0..y_length) + 0.5 * k1k2.i(y_length..2 * y_length));
 
         all_x.push(x);
         all_y.push(y.copy());
@@ -548,10 +527,7 @@ fn solve_rkf45(
             step = remaining;
         }
 
-        let k1 = f.forward_ts(&[
-            Tensor::from(x).to_kind(kind).to_device(device),
-            y.copy(),
-        ])?;
+        let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
         let k1_size = k1.size();
         let k1_rank = k1_size.len();
         if k1_rank != 1 {
@@ -570,10 +546,8 @@ fn solve_rkf45(
         let k2 = {
             let x_step = x + 0.25 * step;
             let y_step: Tensor = &y + 0.25 * &step * &k1;
-            let k2_unchecked = f.forward_ts(&[
-                Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step,
-            ])?;
+            let k2_unchecked =
+                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
             let k2_size = k2_unchecked.size();
             let k2_rank = k2_size.len();
             if k2_rank != 1 {
@@ -595,10 +569,8 @@ fn solve_rkf45(
         let k3 = {
             let x_step = x + 0.375 * step;
             let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
-            let k3_unchecked = f.forward_ts(&[
-                Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step,
-            ])?;
+            let k3_unchecked =
+                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
             let k3_size = k3_unchecked.size();
             let k3_rank = k3_size.len();
             if k3_rank != 1 {
@@ -623,10 +595,8 @@ fn solve_rkf45(
                 + (1932.0 / 2197.0 * &step * &k1)
                 + (-7200.0 / 2197.0 * &step * &k2)
                 + (7296.0 / 2197.0 * &step * &k3);
-            let k4_unchecked = f.forward_ts(&[
-                Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step,
-            ])?;
+            let k4_unchecked =
+                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
             let k4_size = k4_unchecked.size();
             let k4_rank = k4_size.len();
             if k4_rank != 1 {
@@ -652,10 +622,8 @@ fn solve_rkf45(
                 + (-8.0 * &step * &k2)
                 + (3680.0 / 513.0 * &step * &k3)
                 + (-845.0 / 4104.0 * &step * &k4);
-            let k5_unchecked = f.forward_ts(&[
-                Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step,
-            ])?;
+            let k5_unchecked =
+                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
             let k5_size = k5_unchecked.size();
             let k5_rank = k5_size.len();
             if k5_rank != 1 {
@@ -682,10 +650,8 @@ fn solve_rkf45(
                 + (-3544.0 / 2565.0 * &step * &k3)
                 + (1859.0 / 4104.0 * &step * &k4)
                 + (-11.0 / 40.0 * &step * &k5);
-            let k6_unchecked = f.forward_ts(&[
-                Tensor::from(x_step).to_kind(kind).to_device(device),
-                y_step,
-            ])?;
+            let k6_unchecked =
+                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
             let k6_size = k6_unchecked.size();
             let k6_rank = k6_size.len();
             if k6_rank != 1 {

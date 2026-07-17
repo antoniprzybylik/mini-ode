@@ -1,5 +1,5 @@
-use tch::{Device, Kind, Tensor, IndexOp};
 use crate::compute_jacobian;
+use tch::{Device, IndexOp, Kind, Tensor};
 
 #[test]
 #[should_panic(expected = "x must be 1-dimensional")]

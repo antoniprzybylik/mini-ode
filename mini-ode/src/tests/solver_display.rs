@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use crate::Solver;
 use super::mock_optimizer::MockOptimizer;
+use crate::Solver;
 use crate::optimizers;
+use std::sync::Arc;
 
 #[test]
 fn test_solver_display_euler_case1() {
@@ -30,11 +30,7 @@ fn test_solver_display_implicit_euler_mock_optimizer() {
 
 #[test]
 fn test_solver_display_implicit_euler_cg_optimizer_case1() {
-    let optimizer = Arc::new(optimizers::CG::new(
-        100,
-        None,
-        None
-    ));
+    let optimizer = Arc::new(optimizers::CG::new(100, None, None));
     let solver = Solver::ImplicitEuler {
         step: 0.2,
         optimizer,
@@ -47,11 +43,7 @@ fn test_solver_display_implicit_euler_cg_optimizer_case1() {
 
 #[test]
 fn test_solver_display_implicit_euler_cg_optimizer_case2() {
-    let optimizer = Arc::new(optimizers::CG::new(
-        100,
-        Some(0.001),
-        None
-    ));
+    let optimizer = Arc::new(optimizers::CG::new(100, Some(0.001), None));
     let solver = Solver::ImplicitEuler {
         step: 0.2,
         optimizer,
@@ -64,11 +56,7 @@ fn test_solver_display_implicit_euler_cg_optimizer_case2() {
 
 #[test]
 fn test_solver_display_implicit_euler_cg_optimizer_case3() {
-    let optimizer = Arc::new(optimizers::CG::new(
-        100,
-        None,
-        Some(7.1)
-    ));
+    let optimizer = Arc::new(optimizers::CG::new(100, None, Some(7.1)));
     let solver = Solver::ImplicitEuler {
         step: 0.2,
         optimizer,
@@ -81,11 +69,7 @@ fn test_solver_display_implicit_euler_cg_optimizer_case3() {
 
 #[test]
 fn test_solver_display_implicit_euler_cg_optimizer_case4() {
-    let optimizer = Arc::new(optimizers::CG::new(
-        100,
-        Some(0.003),
-        Some(0.0005)
-    ));
+    let optimizer = Arc::new(optimizers::CG::new(100, Some(0.003), Some(0.0005)));
     let solver = Solver::ImplicitEuler {
         step: 0.2,
         optimizer,

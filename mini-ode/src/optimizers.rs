@@ -106,12 +106,18 @@ pub struct CG {
 ///
 /// # Returns
 /// Gradient tensor at `x`.
-pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<Tensor, String> {
+pub(crate) fn differentiate(
+    function: &dyn Fn(&Tensor) -> Tensor,
+    x: &Tensor,
+) -> Result<Tensor, String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+        return Err(format!(
+            "Bad shape of `y`. Expected [], but got {:?}",
+            y.size()
+        ));
     }
 
     if !y.requires_grad() {
@@ -128,18 +134,24 @@ pub(crate) fn differentiate(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) ->
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian)`, both detached tensors. `grad` is 1D, `hessian` is 2D.
-pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<(Tensor, Tensor), String> {
+pub(crate) fn gradient_and_hessian(
+    function: &dyn Fn(&Tensor) -> Tensor,
+    x: &Tensor,
+) -> Result<(Tensor, Tensor), String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+        return Err(format!(
+            "Bad shape of `y`. Expected [], but got {:?}",
+            y.size()
+        ));
     }
 
     if !y.requires_grad() {
         return Ok((
             tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
-            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device()))
+            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device())),
         ));
     }
 
@@ -153,7 +165,10 @@ pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Ten
     // If gradient is constant, immediately return gradient and zero hessian
     // It is not possible to differentiate constants in torch
     if !grad.requires_grad() {
-        return Ok((grad, Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device))));
+        return Ok((
+            grad,
+            Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
+        ));
     }
 
     let mut vectors = Vec::<Tensor>::with_capacity(grad_len as usize);
@@ -183,19 +198,28 @@ pub(crate) fn gradient_and_hessian(function: &dyn Fn(&Tensor) -> Tensor, x: &Ten
 /// * `x` - Evaluation point (1D tensor).
 /// # Returns
 /// Tuple `(grad, hessian, d3_tensor)`, both detached tensors. `grad` is 1D, `hessian` is 2D, `d3_tensor` is 3D.
-pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &Tensor) -> Result<(Tensor, Tensor, Tensor), String> {
+pub(crate) fn derivative_tensors_123(
+    function: &dyn Fn(&Tensor) -> Tensor,
+    x: &Tensor,
+) -> Result<(Tensor, Tensor, Tensor), String> {
     let x_with_grad = x.detach().copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!("Bad shape of `y`. Expected [], but got {:?}", y.size()));
+        return Err(format!(
+            "Bad shape of `y`. Expected [], but got {:?}",
+            y.size()
+        ));
     }
 
     if !y.requires_grad() {
         return Ok((
             tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
             tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device())),
-            tch::Tensor::zeros([x.size()[0], x.size()[0], x.size()[0]], (x.kind(), x.device()))
+            tch::Tensor::zeros(
+                [x.size()[0], x.size()[0], x.size()[0]],
+                (x.kind(), x.device()),
+            ),
         ));
     }
 
@@ -213,7 +237,7 @@ pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &T
         return Ok((
             grad,
             Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
-            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
+            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device)),
         ));
     }
 
@@ -239,7 +263,7 @@ pub(crate) fn derivative_tensors_123(function: &dyn Fn(&Tensor) -> Tensor, x: &T
         return Ok((
             grad,
             hessian,
-            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))
+            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device)),
         ));
     }
 
@@ -300,7 +324,7 @@ fn choose_step_golden_section(
     // Heuristics: Try to set x2 based on atol value. If we succeed, we can
     //             skip some forward search iterations.
     let fx_guess = function(&(x0 + direction * atol * 15.)).double_value(&[]);
-    x2 =  if !fx_guess.is_finite() || fx_guess > fx1 {
+    x2 = if !fx_guess.is_finite() || fx_guess > fx1 {
         P0
     } else {
         atol * 15.
@@ -370,10 +394,15 @@ fn choose_step_backtracking(
         if !fx.is_finite() {
             true
         } else {
-            fx > fx0 + grad.reshape([-1]).dot(&direction.reshape([-1])).double_value(&[]) * alpha * t
+            fx > fx0
+                + grad
+                    .reshape([-1])
+                    .dot(&direction.reshape([-1]))
+                    .double_value(&[])
+                    * alpha
+                    * t
         }
-    }
-    {
+    } {
         t *= beta;
     }
 
@@ -422,7 +451,12 @@ impl Optimizer for CG {
         for step_num in 0..self.max_steps {
             let grad = match differentiate(function, &x) {
                 Ok(grad) => grad,
-                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in CG optimizer: {}", e))
+                Err(e) => {
+                    return Err(anyhow!(
+                        "Runtime error: Differentiation failed in CG optimizer: {}",
+                        e
+                    ));
+                }
             };
 
             // Stop if gradient is smaller than `gtol`
@@ -443,8 +477,9 @@ impl Optimizer for CG {
             let direction = match step_num {
                 0 => -&grad,
                 _ => {
-                    let orthogonality_measure = grad.reshape([-1]).dot(&prev_grad.reshape([-1])).abs()
-                        / grad.reshape([-1]).dot(&grad.reshape([-1]));
+                    let orthogonality_measure =
+                        grad.reshape([-1]).dot(&prev_grad.reshape([-1])).abs()
+                            / grad.reshape([-1]).dot(&grad.reshape([-1]));
                     if orthogonality_measure.double_value(&[]) > 0.2 {
                         // Restart
                         -&grad
@@ -576,7 +611,12 @@ impl Optimizer for BFGS {
         let mut appr_inv_h = identity.copy();
         let mut curr_grad = match differentiate(function, &x) {
             Ok(grad) => grad,
-            Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in BFGS optimizer: {}", e))
+            Err(e) => {
+                return Err(anyhow!(
+                    "Runtime error: Differentiation failed in BFGS optimizer: {}",
+                    e
+                ));
+            }
         };
         let mut curr_y = function(&x);
 
@@ -629,7 +669,12 @@ impl Optimizer for BFGS {
 
             let grad = match differentiate(function, &x) {
                 Ok(grad) => grad,
-                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in BFGS optimizer: {}", e))
+                Err(e) => {
+                    return Err(anyhow!(
+                        "Runtime error: Differentiation failed in BFGS optimizer: {}",
+                        e
+                    ));
+                }
             };
             let gdiff = &grad - &curr_grad;
 
@@ -762,7 +807,12 @@ impl Optimizer for Newton {
         for _ in 0..self.max_steps {
             let (curr_grad, curr_hessian) = match gradient_and_hessian(function, &x) {
                 Ok(gh) => gh,
-                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in Newton optimizer: {}", e))
+                Err(e) => {
+                    return Err(anyhow!(
+                        "Runtime error: Differentiation failed in Newton optimizer: {}",
+                        e
+                    ));
+                }
             };
 
             // Check for stop condition
@@ -916,10 +966,16 @@ impl Optimizer for Halley {
         }
 
         for _ in 0..self.max_steps {
-            let (curr_grad, curr_hessian, curr_d3_tensor) = match derivative_tensors_123(function, &x) {
-                Ok(ghd3) => ghd3,
-                Err(e) => return Err(anyhow!("Runtime error: Differentiation failed in Halley optimizer: {}", e))
-            };
+            let (curr_grad, curr_hessian, curr_d3_tensor) =
+                match derivative_tensors_123(function, &x) {
+                    Ok(ghd3) => ghd3,
+                    Err(e) => {
+                        return Err(anyhow!(
+                            "Runtime error: Differentiation failed in Halley optimizer: {}",
+                            e
+                        ));
+                    }
+                };
 
             // Check for stop condition
             if let Some(gtol) = self.gtol {
@@ -938,7 +994,14 @@ impl Optimizer for Halley {
             // Calculate step direction
             let hessian_pinv = curr_hessian.linalg_pinv(1e-14, false);
             let neg_newton_dir = hessian_pinv.mm(&curr_grad.reshape([-1, 1]));
-            let direction = -hessian_pinv.mm(&(curr_grad.reshape([-1, 1]) + curr_d3_tensor.matmul(&neg_newton_dir).reshape([x0_length, x0_length]).mm(&neg_newton_dir)*0.5)).reshape([-1]);
+            let direction = -hessian_pinv
+                .mm(&(curr_grad.reshape([-1, 1])
+                    + curr_d3_tensor
+                        .matmul(&neg_newton_dir)
+                        .reshape([x0_length, x0_length])
+                        .mm(&neg_newton_dir)
+                        * 0.5))
+                .reshape([-1]);
 
             // Choose optimal step in given direction using line search
             let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9);
