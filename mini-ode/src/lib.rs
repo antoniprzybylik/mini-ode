@@ -784,7 +784,7 @@ fn solve_row1(
         let y_next = y_prev + current_step * delta_y;
 
         x = &x_prev + current_step;
-        y = y_next.copy();
+        y = y_next.detach().copy();
 
         all_x.push(x);
         all_y.push(y.copy());
