@@ -1,0 +1,153 @@
+- case: euler_solver_correct_usage
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    xs, ys = solver.solve(f, (0., 1.), torch.tensor([1.]))
+    reveal_type(xs)  # N: Revealed type is "torch._tensor.Tensor"
+    reveal_type(ys)  # N: Revealed type is "torch._tensor.Tensor"
+
+- case: euler_solver_wrong_step_type
+  main: |
+    import mini_ode
+    solver = mini_ode.EulerMethodSolver(step="0.1")
+  out: |
+    main:2: error: Argument "step" to "EulerMethodSolver" has incompatible type "str"; expected "float"  [arg-type]
+
+- case: euler_solver_assign_final_step
+  main: |
+    import mini_ode
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    solver.step = 0.02
+  out: |
+    main:3: error: Cannot assign to final attribute "step"  [misc]
+
+- case: euler_solver_assign_wrong_type_step
+  main: |
+    import mini_ode
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    solver.step = "0.1"
+  out: |
+    main:3: error: Cannot assign to final attribute "step"  [misc]
+    main:3: error: Incompatible types in assignment (expression has type "str", variable has type "float")  [assignment]
+
+- case: euler_solve_lambda_not_scriptfunction
+  main: |
+    import mini_ode
+    import torch
+
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    xs, ys = solver.solve(lambda x, y: y, (0., 1.), torch.tensor([1.]))
+  out: |
+    main:5: error: Argument 1 to "solve" of "Solver" has incompatible type "Callable[[Any, Any], Any]"; expected "ScriptFunction[Any, Any]"  [arg-type]
+
+- case: euler_solve_wrong_interval_type
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    xs, ys = solver.solve(f, ("a", "b"), torch.tensor([1.]))
+  out: |
+    main:6: error: Argument 2 to "solve" of "Solver" has incompatible type "tuple[str, str]"; expected "Sequence[float]"  [arg-type]
+
+- case: euler_solve_wrong_y0_type
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    solver = mini_ode.EulerMethodSolver(step=0.01)
+    xs, ys = solver.solve(f, (0., 1.), 1.0)
+  out: |
+    main:6: error: Argument 3 to "solve" of "Solver" has incompatible type "float"; expected "Tensor"  [arg-type]
+
+- case: implicit_euler_correct_usage
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    opt = mini_ode.optimizers.Newton(max_steps=3)
+    solver = mini_ode.ImplicitEulerMethodSolver(step=0.01, optimizer=opt)
+    xs, ys = solver.solve(f, (0., 1.), torch.tensor([1.]))
+    reveal_type(xs)  # N: Revealed type is "torch._tensor.Tensor"
+    reveal_type(ys)  # N: Revealed type is "torch._tensor.Tensor"
+
+- case: implicit_euler_missing_optimizer
+  main: |
+    import mini_ode
+    solver = mini_ode.ImplicitEulerMethodSolver(step=0.01)
+  out: |
+    main:2: error: Missing positional argument "optimizer" in call to "ImplicitEulerMethodSolver"  [call-arg]
+
+- case: implicit_euler_wrong_optimizer_type
+  main: |
+    import mini_ode
+    solver = mini_ode.ImplicitEulerMethodSolver(step=0.01, optimizer=0.1)
+  out: |
+    main:2: error: Argument "optimizer" to "ImplicitEulerMethodSolver" has incompatible type "float"; expected "Optimizer"  [arg-type]
+
+- case: glrk4_correct_usage
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    opt = mini_ode.optimizers.Newton(max_steps=3)
+    solver = mini_ode.GLRK4MethodSolver(step=0.01, optimizer=opt)
+    xs, ys = solver.solve(f, (0., 1.), torch.tensor([1.]))
+    reveal_type(xs)  # N: Revealed type is "torch._tensor.Tensor"
+    reveal_type(ys)  # N: Revealed type is "torch._tensor.Tensor"
+
+- case: glrk4_missing_optimizer
+  main: |
+    import mini_ode
+    solver = mini_ode.GLRK4MethodSolver(step=0.01)
+  out: |
+    main:2: error: Missing positional argument "optimizer" in call to "GLRK4MethodSolver"  [call-arg]
+
+- case: rkf45_correct_usage
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    solver = mini_ode.RKF45MethodSolver(0.00001, 0.00001, 1e-9, 0.9)
+    xs, ys = solver.solve(f, (0., 1.), torch.tensor([1.]))
+    reveal_type(xs)  # N: Revealed type is "torch._tensor.Tensor"
+    reveal_type(ys)  # N: Revealed type is "torch._tensor.Tensor"
+
+- case: rkf45_wrong_arg_type
+  main: |
+    import mini_ode
+    solver = mini_ode.RKF45MethodSolver("a", 0.00001, 1e-9, 0.9)
+  out: |
+    main:2: error: Argument 1 to "RKF45MethodSolver" has incompatible type "str"; expected "float"  [arg-type]
+
+- case: rkf45_missing_args
+  main: |
+    import mini_ode
+    solver = mini_ode.RKF45MethodSolver(0.00001, 0.00001)
+  out: |
+    main:2: error: Missing positional arguments "min_step", "safety_factor" in call to "RKF45MethodSolver"  [call-arg]
+
+- case: row1_correct_usage
+  main: |
+    import mini_ode
+    import torch
+
+    f = torch.jit.trace(lambda x, y: y, (torch.tensor(0.), torch.tensor([0.])))
+    solver = mini_ode.ROW1MethodSolver(step=0.01)
+    xs, ys = solver.solve(f, (0., 1.), torch.tensor([1.]))
+    reveal_type(solver.step)  # N: Revealed type is "float"
+
+- case: newton_wrong_max_steps_type
+  main: |
+    import mini_ode
+    opt = mini_ode.optimizers.Newton(max_steps="3")
+  out: |
+    main:2: error: Argument "max_steps" to "Newton" has incompatible type "str"; expected "int"  [arg-type]
