@@ -721,7 +721,7 @@ fn solve_rkf45(
         let d = (&next_y4 - &next_y5).abs();
         let e = next_y5.abs() * rtol + atol;
 
-        let alpha = (e / d).sqrt().min().double_value(&[]);
+        let alpha = (e / d).pow_tensor_scalar(0.2).min().double_value(&[]);
         let condition = safety_factor * alpha;
 
         if condition < 1f64 {
