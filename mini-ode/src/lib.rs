@@ -776,7 +776,7 @@ fn solve_row1(
         }
 
         let n = jacobian.size()[0];
-        let eye = Tensor::eye(n, (tch::Kind::Float, jacobian.device()));
+        let eye = Tensor::eye(n, (jacobian.kind(), jacobian.device()));
         let step_j = current_step * &jacobian;
         let inv_matrix = (eye - step_j).inverse();
 
