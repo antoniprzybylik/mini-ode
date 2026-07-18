@@ -109,22 +109,23 @@ pub struct CG {
 pub(crate) fn differentiate(
     function: &dyn Fn(&Tensor) -> Tensor,
     x: &Tensor,
-) -> Result<Tensor, String> {
-    let x_with_grad = x.detach().copy().set_requires_grad(true);
+) -> anyhow::Result<Tensor> {
+    let x_with_grad = x.f_detach()?.copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!(
+        return Err(anyhow!(
             "Bad shape of `y`. Expected [], but got {:?}",
             y.size()
         ));
     }
 
     if !y.requires_grad() {
-        return Ok(tch::Tensor::zeros(x.size(), (x.kind(), x.device())));
+        return Ok(tch::Tensor::f_zeros(x.size(), (x.kind(), x.device()))?);
     }
 
-    Ok(tch::Tensor::run_backward(&[y], &[x_with_grad], false, false)[0].copy())
+    let gradient = tch::Tensor::f_run_backward(&[y], &[x_with_grad], false, false)?[0].copy();
+    Ok(gradient)
 }
 
 /// Computes the gradient and Hessian of `function` at `x` using automatic differentiation.
@@ -137,12 +138,12 @@ pub(crate) fn differentiate(
 pub(crate) fn gradient_and_hessian(
     function: &dyn Fn(&Tensor) -> Tensor,
     x: &Tensor,
-) -> Result<(Tensor, Tensor), String> {
-    let x_with_grad = x.detach().copy().set_requires_grad(true);
+) -> anyhow::Result<(Tensor, Tensor)> {
+    let x_with_grad = x.f_detach()?.copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!(
+        return Err(anyhow!(
             "Bad shape of `y`. Expected [], but got {:?}",
             y.size()
         ));
@@ -150,14 +151,14 @@ pub(crate) fn gradient_and_hessian(
 
     if !y.requires_grad() {
         return Ok((
-            tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
-            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device())),
+            tch::Tensor::f_zeros(x.size(), (x.kind(), x.device()))?,
+            tch::Tensor::f_zeros([x.size()[0], x.size()[0]], (x.kind(), x.device()))?,
         ));
     }
 
     // keep_graph = true (this graph is needed for some functions during second differentiation)
     // create_graph = true (allow calculating second derivatives)
-    let grad = Tensor::run_backward(&[y], &[&x_with_grad], true, true)[0].copy();
+    let grad = Tensor::f_run_backward(&[y], &[&x_with_grad], true, true)?[0].copy();
     let grad_len = grad.size()[0];
     let grad_kind = grad.kind();
     let grad_device = grad.device();
@@ -167,7 +168,7 @@ pub(crate) fn gradient_and_hessian(
     if !grad.requires_grad() {
         return Ok((
             grad,
-            Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
+            Tensor::f_zeros([grad_len, grad_len], (grad_kind, grad_device))?,
         ));
     }
 
@@ -175,18 +176,18 @@ pub(crate) fn gradient_and_hessian(
     for i in 0..grad_len {
         // keep_graph = true (we need to run backward pass multiple times - in each iteration of the loop)
         // create_graph = false (we don't need to differentiate three times)
-        vectors.append(&mut Tensor::run_backward(
+        vectors.append(&mut Tensor::f_run_backward(
             &[grad.i(i)],
             &[&x_with_grad],
             true,
             false,
-        ));
+        )?);
     }
 
     // Detach autograd computation graph
-    let grad = grad.detach();
+    let grad = grad.f_detach()?;
     // Stack slices of the Hessian matrix and detach autograd computation graph
-    let hessian = Tensor::stack(&vectors, 0).detach();
+    let hessian = Tensor::f_stack(&vectors, 0)?.f_detach()?;
 
     Ok((grad, hessian))
 }
@@ -201,12 +202,12 @@ pub(crate) fn gradient_and_hessian(
 pub(crate) fn derivative_tensors_123(
     function: &dyn Fn(&Tensor) -> Tensor,
     x: &Tensor,
-) -> Result<(Tensor, Tensor, Tensor), String> {
-    let x_with_grad = x.detach().copy().set_requires_grad(true);
+) -> anyhow::Result<(Tensor, Tensor, Tensor)> {
+    let x_with_grad = x.f_detach()?.copy().set_requires_grad(true);
     let y = function(&x_with_grad);
 
     if y.size() != [] as [i64; 0] {
-        return Err(format!(
+        return Err(anyhow!(
             "Bad shape of `y`. Expected [], but got {:?}",
             y.size()
         ));
@@ -214,18 +215,18 @@ pub(crate) fn derivative_tensors_123(
 
     if !y.requires_grad() {
         return Ok((
-            tch::Tensor::zeros(x.size(), (x.kind(), x.device())),
-            tch::Tensor::zeros([x.size()[0], x.size()[0]], (x.kind(), x.device())),
-            tch::Tensor::zeros(
+            tch::Tensor::f_zeros(x.size(), (x.kind(), x.device()))?,
+            tch::Tensor::f_zeros([x.size()[0], x.size()[0]], (x.kind(), x.device()))?,
+            tch::Tensor::f_zeros(
                 [x.size()[0], x.size()[0], x.size()[0]],
                 (x.kind(), x.device()),
-            ),
+            )?,
         ));
     }
 
     // keep_graph = true (this graph is needed for some functions during second differentiation)
     // create_graph = true (allow calculating second derivatives)
-    let grad = Tensor::run_backward(&[y], &[&x_with_grad], true, true)[0].copy();
+    let grad = Tensor::f_run_backward(&[y], &[&x_with_grad], true, true)?[0].copy();
     let grad_len = grad.size()[0];
     let grad_kind = grad.kind();
     let grad_device = grad.device();
@@ -236,8 +237,8 @@ pub(crate) fn derivative_tensors_123(
     if !grad.requires_grad() {
         return Ok((
             grad,
-            Tensor::zeros([grad_len, grad_len], (grad_kind, grad_device)),
-            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device)),
+            Tensor::f_zeros([grad_len, grad_len], (grad_kind, grad_device))?,
+            Tensor::f_zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))?,
         ));
     }
 
@@ -245,16 +246,16 @@ pub(crate) fn derivative_tensors_123(
     for i in 0..grad_len {
         // keep_graph = true (we need to run backward pass multiple times - in each iteration of the loop)
         // create_graph = true (we need to differentiate three times)
-        vectors.append(&mut Tensor::run_backward(
+        vectors.append(&mut Tensor::f_run_backward(
             &[grad.i(i)],
             &[&x_with_grad],
             true,
             true,
-        ));
+        )?);
     }
 
     // Stack slices of the Hessian matrix
-    let hessian = Tensor::stack(&vectors, 0);
+    let hessian = Tensor::f_stack(&vectors, 0)?;
 
     // If gradient is constant, immediately return gradient zero hessian and
     // zero tensor of third order derivatives
@@ -263,7 +264,7 @@ pub(crate) fn derivative_tensors_123(
         return Ok((
             grad,
             hessian,
-            Tensor::zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device)),
+            Tensor::f_zeros([grad_len, grad_len, grad_len], (grad_kind, grad_device))?,
         ));
     }
 
@@ -271,21 +272,21 @@ pub(crate) fn derivative_tensors_123(
     for i in 0..grad_len {
         let mut vectors1 = Vec::<Tensor>::with_capacity(grad_len as usize);
         for j in 0..grad_len {
-            vectors1.append(&mut Tensor::run_backward(
+            vectors1.append(&mut Tensor::f_run_backward(
                 &[hessian.i((i, j))],
                 &[&x_with_grad],
                 true,
                 false,
-            ));
+            )?);
         }
-        vectors2.push(Tensor::stack(&vectors1, 0));
+        vectors2.push(Tensor::f_stack(&vectors1, 0)?);
     }
 
     // Detach autograd computation graph
-    let grad = grad.detach();
-    let hessian = hessian.detach();
+    let grad = grad.f_detach()?;
+    let hessian = hessian.f_detach()?;
     // Stack slices of the tensor of third derivatives and detach autograd computation graph
-    let d3_tensor = Tensor::stack(&vectors2, 0).detach();
+    let d3_tensor = Tensor::f_stack(&vectors2, 0)?.f_detach()?;
 
     Ok((grad, hessian, d3_tensor))
 }
@@ -314,26 +315,26 @@ fn choose_step_golden_section(
     direction: &Tensor,
     function: &dyn Fn(&Tensor) -> Tensor,
     atol: f64,
-) -> Tensor {
+) -> anyhow::Result<Tensor> {
     let (mut x1, mut x2, mut x3, mut x4): (f64, f64, f64, f64);
     let (fx1, mut fx3, mut fx4): (f64, f64, f64);
 
-    fx1 = function(&x0).double_value(&[]);
+    fx1 = function(&x0).f_double_value(&[])?;
 
     x1 = 0.;
     // Heuristics: Try to set x2 based on atol value. If we succeed, we can
     //             skip some forward search iterations.
-    let fx_guess = function(&(x0 + direction * atol * 15.)).double_value(&[]);
+    let fx_guess = function(&(x0 + direction * atol * 15.)).f_double_value(&[])?;
     x2 = if !fx_guess.is_finite() || fx_guess > fx1 {
         P0
     } else {
         atol * 15.
     };
     // Forward search
-    let mut fx = function(&(x0 + direction * x2)).double_value(&[]);
+    let mut fx = function(&(x0 + direction * x2)).f_double_value(&[])?;
     while fx <= fx1 {
         let new_x2 = x1 + (x2 - x1) * PHI2;
-        fx = function(&(x0 + direction * new_x2)).double_value(&[]);
+        fx = function(&(x0 + direction * new_x2)).f_double_value(&[])?;
         if !fx.is_finite() {
             break;
         }
@@ -342,8 +343,8 @@ fn choose_step_golden_section(
 
     x3 = x2 - (x2 - x1) * RPHI;
     x4 = x1 + (x2 - x1) * RPHI;
-    fx3 = function(&(x0 + direction * x3)).double_value(&[]);
-    fx4 = function(&(x0 + direction * x4)).double_value(&[]);
+    fx3 = function(&(x0 + direction * x3)).f_double_value(&[])?;
+    fx4 = function(&(x0 + direction * x4)).f_double_value(&[])?;
     while x2 - x1 > atol {
         if fx3 < fx4 {
             x2 = x4;
@@ -351,18 +352,18 @@ fn choose_step_golden_section(
             fx4 = fx3;
             x3 = x2 - (x2 - x1) * RPHI;
             x4 = x1 + (x2 - x1) * RPHI;
-            fx3 = function(&(x0 + direction * x3)).double_value(&[]);
+            fx3 = function(&(x0 + direction * x3)).f_double_value(&[])?;
         } else {
             x1 = x3;
 
             fx3 = fx4;
             x3 = x2 - (x2 - x1) * RPHI;
             x4 = x1 + (x2 - x1) * RPHI;
-            fx4 = function(&(x0 + direction * x4)).double_value(&[]);
+            fx4 = function(&(x0 + direction * x4)).f_double_value(&[])?;
         }
     }
 
-    direction * ((x1 + x2) / 2.)
+    Ok(direction * ((x1 + x2) / 2.))
 }
 
 /// Performs a backtracking line search to find a step size satisfying the Armijo condition.
@@ -384,21 +385,21 @@ fn choose_step_backtracking(
     grad: &Tensor,
     alpha: f64,
     beta: f64,
-) -> Tensor {
-    let fx0 = function(&x0).double_value(&[]);
+) -> anyhow::Result::<Tensor> {
+    let fx0 = function(&x0).f_double_value(&[])?;
 
     let mut t = 1f64;
     while {
-        let fx = function(&(x0 + direction * t)).double_value(&[]);
+        let fx = function(&(x0 + direction * t)).f_double_value(&[])?;
 
         if !fx.is_finite() {
             true
         } else {
             fx > fx0
                 + grad
-                    .reshape([-1])
-                    .dot(&direction.reshape([-1]))
-                    .double_value(&[])
+                    .f_reshape([-1])?
+                    .f_dot(&direction.f_reshape([-1])?)?
+                    .f_double_value(&[])?
                     * alpha
                     * t
         }
@@ -406,7 +407,7 @@ fn choose_step_backtracking(
         t *= beta;
     }
 
-    direction.copy() * t
+    Ok(direction.copy() * t)
 }
 
 impl CG {
@@ -443,8 +444,8 @@ impl Optimizer for CG {
         let mut prev2_step_norm = 0f64;
         let mut prev_step_norm = 0f64;
 
-        let mut prev_grad = Tensor::zeros_like(&x0);
-        let mut prev_direction = Tensor::zeros_like(&x0);
+        let mut prev_grad = Tensor::f_zeros_like(&x0)?;
+        let mut prev_direction = Tensor::f_zeros_like(&x0)?;
         let mut prev_y: Option<Tensor> = None;
         let mut x = x0.copy();
 
@@ -461,14 +462,14 @@ impl Optimizer for CG {
 
             // Stop if gradient is smaller than `gtol`
             if let Some(gtol) = self.gtol {
-                if grad.norm().double_value(&[]) < gtol {
+                if grad.norm().f_double_value(&[])? < gtol {
                     return Ok(x);
                 }
             } else {
                 // This check is necessary. Continuation of the algorithm
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
-                if grad.norm().double_value(&[]) == 0. {
+                if grad.norm().f_double_value(&[])? == 0. {
                     return Ok(x);
                 }
             }
@@ -478,23 +479,23 @@ impl Optimizer for CG {
                 0 => -&grad,
                 _ => {
                     let orthogonality_measure =
-                        grad.reshape([-1]).dot(&prev_grad.reshape([-1])).abs()
-                            / grad.reshape([-1]).dot(&grad.reshape([-1]));
-                    if orthogonality_measure.double_value(&[]) > 0.2 {
+                        grad.f_reshape([-1])?.f_dot(&prev_grad.f_reshape([-1])?)?.f_abs()?
+                            / grad.f_reshape([-1])?.f_dot(&grad.f_reshape([-1])?)?;
+                    if orthogonality_measure.f_double_value(&[])? > 0.2 {
                         // Restart
                         -&grad
                     } else {
-                        let beta = grad.reshape([-1]).dot(&(&grad - &prev_grad).reshape([-1]))
-                            / prev_grad.reshape([-1]).dot(&prev_grad.reshape([-1]));
+                        let beta = grad.f_reshape([-1])?.f_dot(&(&grad - &prev_grad).f_reshape([-1])?)?
+                            / prev_grad.f_reshape([-1])?.f_dot(&prev_grad.f_reshape([-1])?)?;
                         // Clamp beta to be nonnegative (PR+)
-                        let beta = if beta.double_value(&[]) > 0. {
+                        let beta = if beta.f_double_value(&[])? > 0. {
                             beta
                         } else {
-                            tch::Tensor::zeros_like(&beta)
+                            tch::Tensor::f_zeros_like(&beta)?
                         };
                         // Clamp beta to not be too large (this may result in numerical instability)
-                        let beta = if beta.double_value(&[]) > 1000000000000. {
-                            tch::Tensor::ones_like(&beta) * 1000000000000.
+                        let beta = if beta.f_double_value(&[])? > 1000000000000. {
+                            tch::Tensor::f_ones_like(&beta)? * 1000000000000.
                         } else {
                             beta
                         };
@@ -509,12 +510,12 @@ impl Optimizer for CG {
                 P0.max(prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 1000.);
 
             // Choose step in direction `direction`
-            let step = choose_step_golden_section(&x, &direction, &function, linesearch_atol);
+            let step = choose_step_golden_section(&x, &direction, &function, linesearch_atol)?;
 
             // Update previous step norms
             prev3_step_norm = prev2_step_norm;
             prev2_step_norm = prev_step_norm;
-            prev_step_norm = step.norm().double_value(&[]);
+            prev_step_norm = step.f_norm()?.f_double_value(&[])?;
 
             // Apply step
             x = x + step;
@@ -522,7 +523,7 @@ impl Optimizer for CG {
             // Stop if change in function value is smaller than `ftol`
             let y = function(&x);
             if let (Some(prev_y), Some(ftol)) = (prev_y, self.ftol) {
-                if (&prev_y - &y).double_value(&[]) < ftol {
+                if (&prev_y - &y).f_double_value(&[])? < ftol {
                     return Ok(x);
                 }
             }
@@ -628,32 +629,32 @@ impl Optimizer for BFGS {
         for _ in 0..self.max_steps {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
-                if curr_grad.norm().double_value(&[]) < gtol {
+                if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
                     return Ok(x);
                 }
             } else {
                 // This check is necessary. Continuation of the algorithm
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
-                if curr_grad.norm().double_value(&[]) == 0. {
+                if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
                     return Ok(x);
                 }
             }
 
             // Calculate step direction base on the gradient and approximate hessian
-            let direction = (-appr_inv_h.mm(&curr_grad.reshape([-1, 1]))).reshape([-1]);
+            let direction = (-appr_inv_h.f_mm(&curr_grad.f_reshape([-1, 1])?)?).f_reshape([-1])?;
 
             // Calculate linesearch_atol based on previous step norms
             let linesearch_atol =
                 P0.max(prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 100.);
 
             // Choose optimal step in given direction using line search
-            let step = choose_step_golden_section(&x, &direction, function, linesearch_atol);
+            let step = choose_step_golden_section(&x, &direction, function, linesearch_atol)?;
 
             // Update previous step norms
             prev3_step_norm = prev2_step_norm;
             prev2_step_norm = prev_step_norm;
-            prev_step_norm = step.norm().double_value(&[]);
+            prev_step_norm = step.f_norm()?.f_double_value(&[])?;
 
             // Apply step
             x = x + &step;
@@ -661,7 +662,7 @@ impl Optimizer for BFGS {
             // Check for stop contition
             let y = function(&x);
             if let Some(ftol) = self.ftol {
-                if (curr_y.double_value(&[]) - y.double_value(&[])) < ftol {
+                if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
                     return Ok(x);
                 }
             }
@@ -683,8 +684,8 @@ impl Optimizer for BFGS {
             let gamma = {
                 let delta = 0.0001;
 
-                let sty = step.dot(&gdiff).double_value(&[]);
-                let step_norm_sq = step.dot(&step).double_value(&[]);
+                let sty = step.f_dot(&gdiff)?.f_double_value(&[])?;
+                let step_norm_sq = step.f_dot(&step)?.f_double_value(&[])?;
 
                 let theta = if sty >= delta * step_norm_sq {
                     1.
@@ -705,7 +706,7 @@ impl Optimizer for BFGS {
                     sty / step_norm_sq
                 };
                 let gdiff_prime = &gdiff * theta + &step * ((1. - theta) * projection_factor);
-                let sty_prime = step.dot(&gdiff_prime).double_value(&[]);
+                let sty_prime = step.f_dot(&gdiff_prime)?.f_double_value(&[])?;
 
                 if sty_prime.abs() < 1e-10 {
                     1. / (delta * step_norm_sq + 1e-10)
@@ -715,10 +716,10 @@ impl Optimizer for BFGS {
             };
 
             // Compute approximation of inverse Hessian
-            appr_inv_h = (&identity - gamma * step.reshape([-1, 1]).mm(&gdiff.reshape([1, -1])))
-                .mm(&appr_inv_h)
-                .mm(&(&identity - gamma * gdiff.reshape([-1, 1]).mm(&step.reshape([1, -1]))))
-                + gamma * step.reshape([-1, 1]).mm(&step.reshape([1, -1]));
+            appr_inv_h = (&identity - gamma * step.f_reshape([-1, 1])?.f_mm(&gdiff.f_reshape([1, -1])?)?)
+                .f_mm(&appr_inv_h)?
+                .f_mm(&(&identity - gamma * gdiff.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?))?
+                + gamma * step.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?;
 
             curr_grad = grad;
         }
@@ -817,40 +818,40 @@ impl Optimizer for Newton {
 
             // Check for stop condition
             if let Some(gtol) = self.gtol {
-                if curr_grad.norm().double_value(&[]) < gtol {
+                if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
                     return Ok(x);
                 }
             } else {
                 // This check is necessary. Continuation of the algorithm
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
-                if curr_grad.norm().double_value(&[]) == 0. {
+                if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
                     return Ok(x);
                 }
             }
 
             // Calculate step direction
-            let negative_grad = -curr_grad.reshape([-1, 1]); // Negative gradient direction
-            let mut lambda = (negative_grad.norm().double_value(&[]) * 1e-3).max(1e-8); // Initial dampening factor
+            let negative_grad = -curr_grad.f_reshape([-1, 1])?; // Negative gradient direction
+            let mut lambda = (negative_grad.f_norm()?.f_double_value(&[])? * 1e-3).max(1e-8); // Initial dampening factor
             let direction = loop {
                 // We damp hessian until it is positive definite.
                 // For non-positive definite Hessian, Newton method may give unwanted results.
                 let damped_hessian =
-                    &curr_hessian + Tensor::eye(x0_length, (kind, device)) * lambda;
+                    &curr_hessian + Tensor::f_eye(x0_length, (kind, device))? * lambda;
 
                 // Try to perform Banach-Cholesky decomposition of damped hessian
                 match damped_hessian.f_linalg_cholesky(false) {
                     Ok(lower_triangular) => {
                         // Hessian is positive-definite. Solve system with Banach-Cholesky decomposition
-                        let y = lower_triangular.linalg_solve_triangular(
+                        let y = lower_triangular.f_linalg_solve_triangular(
                             &negative_grad,
                             false,
                             true,
                             false,
-                        );
+                        )?;
                         break lower_triangular
-                            .transpose(0, 1)
-                            .linalg_solve_triangular(&y, true, true, false)
+                            .f_transpose(0, 1)?
+                            .f_linalg_solve_triangular(&y, true, true, false)?
                             .reshape([-1]);
                     }
                     Err(_) => {
@@ -859,16 +860,16 @@ impl Optimizer for Newton {
                         if lambda > 1e10 {
                             // Dampening factor (lambda) exceeded maximum value. Fallback to pseudoinverse.
                             break curr_hessian
-                                .linalg_pinv(1e-14, false)
-                                .mm(&negative_grad)
-                                .reshape([-1]);
+                                .f_linalg_pinv(1e-14, false)?
+                                .f_mm(&negative_grad)?
+                                .f_reshape([-1])?;
                         }
                     }
                 }
             };
 
             // Choose optimal step in given direction using line search
-            let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9);
+            let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9)?;
 
             // Apply step
             x = x + &step;
@@ -876,7 +877,7 @@ impl Optimizer for Newton {
             // Check for stop contition
             let y = function(&x);
             if let Some(ftol) = self.ftol {
-                if (curr_y.double_value(&[]) - y.double_value(&[])) < ftol {
+                if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
                     return Ok(x);
                 }
             }
@@ -979,32 +980,32 @@ impl Optimizer for Halley {
 
             // Check for stop condition
             if let Some(gtol) = self.gtol {
-                if curr_grad.norm().double_value(&[]) < gtol {
+                if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
                     return Ok(x);
                 }
             } else {
                 // This check is necessary. Continuation of the algorithm
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
-                if curr_grad.norm().double_value(&[]) == 0. {
+                if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
                     return Ok(x);
                 }
             }
 
             // Calculate step direction
-            let hessian_pinv = curr_hessian.linalg_pinv(1e-14, false);
-            let neg_newton_dir = hessian_pinv.mm(&curr_grad.reshape([-1, 1]));
+            let hessian_pinv = curr_hessian.f_linalg_pinv(1e-14, false)?;
+            let neg_newton_dir = hessian_pinv.f_mm(&curr_grad.f_reshape([-1, 1])?)?;
             let direction = -hessian_pinv
-                .mm(&(curr_grad.reshape([-1, 1])
+                .f_mm(&(curr_grad.f_reshape([-1, 1])?
                     + curr_d3_tensor
-                        .matmul(&neg_newton_dir)
-                        .reshape([x0_length, x0_length])
-                        .mm(&neg_newton_dir)
-                        * 0.5))
-                .reshape([-1]);
+                        .f_matmul(&neg_newton_dir)?
+                        .f_reshape([x0_length, x0_length])?
+                        .f_mm(&neg_newton_dir)?
+                        * 0.5))?
+                .f_reshape([-1])?;
 
             // Choose optimal step in given direction using line search
-            let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9);
+            let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9)?;
 
             // Apply step
             x = x + &step;
@@ -1012,7 +1013,7 @@ impl Optimizer for Halley {
             // Check for stop contition
             let y = function(&x);
             if let Some(ftol) = self.ftol {
-                if (curr_y.double_value(&[]) - y.double_value(&[])) < ftol {
+                if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
                     return Ok(x);
                 }
             }
