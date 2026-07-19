@@ -54,7 +54,7 @@ impl Solver {
         }
 
         // Validate y0
-        if y0.isfinite().all().int64_value(&[]) == 0 {
+        if y0.isfinite().f_all()?.f_int64_value(&[])? == 0 {
             return Err(anyhow!("y0 must consist of finite values"));
         }
 
@@ -205,8 +205,8 @@ fn solve_euler(
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
@@ -320,8 +320,8 @@ fn solve_rk4(
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
@@ -384,8 +384,8 @@ fn solve_implicit_euler(
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
@@ -437,7 +437,7 @@ fn solve_glrk4(
         const A21: f64 = 0.5386751346f64;
         const A22: f64 = 0.25;
 
-        let first_k1k2_guess = Tensor::cat(
+        let first_k1k2_guess = Tensor::f_cat(
             &[
                 f.forward_ts(&[
                     Tensor::from(x + C1 * current_step)
@@ -453,7 +453,7 @@ fn solve_glrk4(
                 ])?,
             ],
             0,
-        );
+        )?;
         let k1k2 = optimizer
             .optimize(
                 &|k1k2_guess| {
@@ -485,15 +485,15 @@ fn solve_glrk4(
             .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
         x = x + current_step;
-        y = &y + current_step * (0.5 * k1k2.i(0..y_length) + 0.5 * k1k2.i(y_length..2 * y_length));
+        y = &y + current_step * (0.5 * k1k2.f_i(0..y_length)? + 0.5 * k1k2.f_i(y_length..2 * y_length)?);
 
         all_x.push(x);
         all_y.push(y.copy());
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
@@ -684,10 +684,10 @@ fn solve_rkf45(
                     + (-9.0 / 50.0 * &k5)
                     + (2.0 / 55.0 * &k6));
 
-        let d = (&next_y4 - &next_y5).abs();
-        let e = next_y5.abs() * rtol + atol;
+        let d = (&next_y4 - &next_y5).f_abs()?;
+        let e = next_y5.f_abs()? * rtol + atol;
 
-        let alpha = (e / d).pow_tensor_scalar(0.2).min().double_value(&[]);
+        let alpha = (e / d).f_pow_tensor_scalar(0.2)?.f_min()?.f_double_value(&[])?;
         let condition = safety_factor * alpha;
 
         if condition < 1f64 {
@@ -712,8 +712,8 @@ fn solve_rkf45(
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
@@ -755,7 +755,7 @@ fn solve_row1(
                 .unwrap()
             },
             &y_prev,
-        );
+        )?;
         let f_current = f.forward_ts(&[
             Tensor::from(x_prev).to_kind(kind).to_device(device),
             y_prev.copy(),
@@ -776,11 +776,11 @@ fn solve_row1(
         }
 
         let n = jacobian.size()[0];
-        let eye = Tensor::eye(n, (jacobian.kind(), jacobian.device()));
+        let eye = Tensor::f_eye(n, (jacobian.kind(), jacobian.device()))?;
         let step_j = current_step * &jacobian;
-        let inv_matrix = (eye - step_j).inverse();
+        let inv_matrix = (eye - step_j).f_inverse()?;
 
-        let delta_y = inv_matrix.matmul(&f_current);
+        let delta_y = inv_matrix.f_matmul(&f_current)?;
         let y_next = y_prev + current_step * delta_y;
 
         x = &x_prev + current_step;
@@ -791,13 +791,13 @@ fn solve_row1(
     }
 
     Ok((
-        Tensor::from_slice(&all_x).to_kind(kind).to_device(device),
-        Tensor::stack(&all_y, 0),
+        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_stack(&all_y, 0)?,
     ))
 }
 
 /// Computes the Jacobian matrix of a function f at point x
-fn compute_jacobian<F>(f: F, x: &Tensor) -> Tensor
+fn compute_jacobian<F>(f: F, x: &Tensor) -> anyhow::Result<Tensor>
 where
     F: Fn(&Tensor) -> Tensor,
 {
@@ -811,10 +811,10 @@ where
 
     for i in 0..y_size {
         let yi = y.i(i);
-        let grad = Tensor::run_backward(&[yi], &[&x_with_grad], true, false)[0].copy();
+        let grad = Tensor::f_run_backward(&[yi], &[&x_with_grad], true, false)?[0].copy();
         grads.push(grad);
         x_with_grad.zero_grad();
     }
 
-    Tensor::stack(&grads, 0)
+    Ok(Tensor::f_stack(&grads, 0)?)
 }
