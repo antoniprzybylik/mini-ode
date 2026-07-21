@@ -53,18 +53,71 @@ impl Solver {
             return Err(anyhow!("x_span is not a valid interval"));
         }
 
+        // Validate solver parameters
+        match self {
+            Self::Euler { step }
+            | Self::RK4 { step }
+            | Self::ImplicitEuler { step, .. }
+            | Self::GLRK4 { step, .. }
+            | Self::ROW1 { step } => {
+                if !step.is_finite() || *step <= 0.0 {
+                    return Err(anyhow!(
+                        "Step size must be a finite positive value, got {}",
+                        step
+                    ));
+                }
+            }
+
+            Self::RKF45 {
+                rtol,
+                atol,
+                min_step,
+                safety_factor,
+            } => {
+                if !rtol.is_finite() || *rtol <= 0.0 {
+                    return Err(anyhow!(
+                        "rtol must be a finite positive value, got {}",
+                        rtol
+                    ));
+                }
+
+                if !atol.is_finite() || *atol <= 0.0 {
+                    return Err(anyhow!(
+                        "atol must be a finite positive value, got {}",
+                        atol
+                    ));
+                }
+
+                if !min_step.is_finite() || *min_step <= 0.0 {
+                    return Err(anyhow!(
+                        "min_step must be a finite positive value, got {}",
+                        min_step
+                    ));
+                }
+
+                if !safety_factor.is_finite() || *safety_factor <= 0.0 {
+                    return Err(anyhow!(
+                        "safety_factor must be a finite positive value, got {}",
+                        safety_factor
+                    ));
+                }
+            }
+        }
+
         // Validate y0
         if y0.isfinite().f_all()?.f_int64_value(&[])? == 0 {
             return Err(anyhow!("y0 must consist of finite values"));
         }
 
         let y0_size = y0.size();
+
         if y0_size.len() != 1 {
             return Err(anyhow!(
                 "y0 must be a one-dimensional tensor but it has {} dimensions",
                 y0_size.len()
             ));
         }
+
         if kind != tch::Kind::Double
             && kind != tch::Kind::Float
             && kind != tch::Kind::BFloat16
@@ -78,13 +131,16 @@ impl Solver {
             Tensor::from(x_span.0).to_kind(kind).to_device(device),
             y0.copy(),
         ])?;
+
         let dy_size = dy.size();
+
         if dy_size.len() != 1 {
             return Err(anyhow!(
                 "Function `f` returns tensor of rank {}, expected one-dimensional tensor",
                 dy_size.len()
             ));
         }
+
         if dy_size[0] != y0_size[0] {
             return Err(anyhow!(
                 "Function `f` returns vector of length {}, expected vector of length {} (same as y0)",
@@ -92,38 +148,49 @@ impl Solver {
                 y0_size[0]
             ));
         }
-        let dy_device = dy.device();
-        if dy_device != device {
+
+        if dy.device() != device {
             return Err(anyhow!(
                 "Function `f` returns tensor on device {:?}, expected tensor to be on device {:?} (same as y0)",
-                dy_device,
+                dy.device(),
                 device
             ));
         }
-        let dy_kind = dy.kind();
-        if dy_kind != kind {
+
+        if dy.kind() != kind {
             return Err(anyhow!(
                 "Function `f` returns tensor of kind {:?}, expected tensor to be of kind {:?} (same as y0)",
-                dy_kind,
+                dy.kind(),
                 kind
+            ));
+        }
+
+        if dy.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+            return Err(anyhow!(
+                "Function `f` returns tensor containing non-finite values"
             ));
         }
 
         match self {
             Self::Euler { step } => solve_euler(f, x_span, y0, *step),
+
             Self::RK4 { step } => solve_rk4(f, x_span, y0, *step),
+
             Self::ImplicitEuler { step, optimizer } => {
                 solve_implicit_euler(f, x_span, y0, *step, optimizer.as_ref())
             }
+
             Self::GLRK4 { step, optimizer } => {
                 solve_glrk4(f, x_span, y0, *step, optimizer.as_ref())
             }
+
             Self::RKF45 {
                 rtol,
                 atol,
                 min_step,
                 safety_factor,
             } => solve_rkf45(f, x_span, y0, *rtol, *atol, *min_step, *safety_factor),
+
             Self::ROW1 { step } => solve_row1(f, x_span, y0, *step),
         }
     }
