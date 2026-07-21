@@ -6,3 +6,5 @@ mod optimizers_derivative_tensors_123_helper;
 mod optimizers_differentiate_helper;
 mod optimizers_gradient_and_hessian_helper;
 mod solver_display;
+
+mod ode_solving_data;
