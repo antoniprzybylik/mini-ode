@@ -385,7 +385,7 @@ fn choose_step_backtracking(
     grad: &Tensor,
     alpha: f64,
     beta: f64,
-) -> anyhow::Result::<Tensor> {
+) -> anyhow::Result<Tensor> {
     let fx0 = function(&x0).f_double_value(&[])?;
 
     let mut t = 1f64;
@@ -478,15 +478,21 @@ impl Optimizer for CG {
             let direction = match step_num {
                 0 => -&grad,
                 _ => {
-                    let orthogonality_measure =
-                        grad.f_reshape([-1])?.f_dot(&prev_grad.f_reshape([-1])?)?.f_abs()?
-                            / grad.f_reshape([-1])?.f_dot(&grad.f_reshape([-1])?)?;
+                    let orthogonality_measure = grad
+                        .f_reshape([-1])?
+                        .f_dot(&prev_grad.f_reshape([-1])?)?
+                        .f_abs()?
+                        / grad.f_reshape([-1])?.f_dot(&grad.f_reshape([-1])?)?;
                     if orthogonality_measure.f_double_value(&[])? > 0.2 {
                         // Restart
                         -&grad
                     } else {
-                        let beta = grad.f_reshape([-1])?.f_dot(&(&grad - &prev_grad).f_reshape([-1])?)?
-                            / prev_grad.f_reshape([-1])?.f_dot(&prev_grad.f_reshape([-1])?)?;
+                        let beta = grad
+                            .f_reshape([-1])?
+                            .f_dot(&(&grad - &prev_grad).f_reshape([-1])?)?
+                            / prev_grad
+                                .f_reshape([-1])?
+                                .f_dot(&prev_grad.f_reshape([-1])?)?;
                         // Clamp beta to be nonnegative (PR+)
                         let beta = if beta.f_double_value(&[])? > 0. {
                             beta
@@ -716,10 +722,12 @@ impl Optimizer for BFGS {
             };
 
             // Compute approximation of inverse Hessian
-            appr_inv_h = (&identity - gamma * step.f_reshape([-1, 1])?.f_mm(&gdiff.f_reshape([1, -1])?)?)
-                .f_mm(&appr_inv_h)?
-                .f_mm(&(&identity - gamma * gdiff.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?))?
-                + gamma * step.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?;
+            appr_inv_h = (&identity
+                - gamma * step.f_reshape([-1, 1])?.f_mm(&gdiff.f_reshape([1, -1])?)?)
+            .f_mm(&appr_inv_h)?
+            .f_mm(
+                &(&identity - gamma * gdiff.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?),
+            )? + gamma * step.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?;
 
             curr_grad = grad;
         }
@@ -996,12 +1004,14 @@ impl Optimizer for Halley {
             let hessian_pinv = curr_hessian.f_linalg_pinv(1e-14, false)?;
             let neg_newton_dir = hessian_pinv.f_mm(&curr_grad.f_reshape([-1, 1])?)?;
             let direction = -hessian_pinv
-                .f_mm(&(curr_grad.f_reshape([-1, 1])?
-                    + curr_d3_tensor
-                        .f_matmul(&neg_newton_dir)?
-                        .f_reshape([x0_length, x0_length])?
-                        .f_mm(&neg_newton_dir)?
-                        * 0.5))?
+                .f_mm(
+                    &(curr_grad.f_reshape([-1, 1])?
+                        + curr_d3_tensor
+                            .f_matmul(&neg_newton_dir)?
+                            .f_reshape([x0_length, x0_length])?
+                            .f_mm(&neg_newton_dir)?
+                            * 0.5),
+                )?
                 .f_reshape([-1])?;
 
             // Choose optimal step in given direction using line search

@@ -24,7 +24,8 @@ fn test_compute_jacobian_linear() {
             a.matmul(y)
         },
         &x,
-    ).unwrap();
+    )
+    .unwrap();
     let expected = Tensor::from_slice(&[2.0f32, 0.0f32, 0.0f32, 3.0f32]).reshape(&[2, 2]);
     assert_eq!(jacobian, expected);
 }
@@ -47,7 +48,8 @@ fn test_compute_jacobian_multi_dim_nonlinear() {
             Tensor::stack(&[&y0.pow_tensor_scalar(2) + &y1, (&y0 * &y1)], 0)
         },
         &x,
-    ).unwrap();
+    )
+    .unwrap();
     let expected = Tensor::from_slice(&[2.0f32, 1.0f32, 2.0f32, 1.0f32]).reshape(&[2, 2]);
     assert_eq!(jacobian, expected);
 }

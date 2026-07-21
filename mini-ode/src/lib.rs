@@ -130,18 +130,22 @@ impl Solver {
 
     pub fn stability_function(&self, x: f64) -> anyhow::Result<f64> {
         if x > 0. {
-            anyhow::bail!(
-                "Stability function is not defined for positive numbers."
-            );
+            anyhow::bail!("Stability function is not defined for positive numbers.");
         }
 
         Ok(match self {
             Self::Euler { .. } => 1. + x,
-            Self::RK4 { .. } => 1. + (1. + (1./2. + (1./6. + (1./24.)*x)*x)*x)*x,
-            Self::ImplicitEuler { .. } => 1./(1.-x),
-            Self::GLRK4 { .. } => (1. + x/2. + x*x/12.)/(1. - x/2. + x*x/12.),
-            Self::RKF45 { .. } => 1. + (1. + (1./2. + (1./6. + (1./24. + (1./120. + (1./2080.)*x)*x)*x)*x)*x)*x,
-            Self::ROW1 { .. } => 1./(1.-x),
+            Self::RK4 { .. } => 1. + (1. + (1. / 2. + (1. / 6. + (1. / 24.) * x) * x) * x) * x,
+            Self::ImplicitEuler { .. } => 1. / (1. - x),
+            Self::GLRK4 { .. } => (1. + x / 2. + x * x / 12.) / (1. - x / 2. + x * x / 12.),
+            Self::RKF45 { .. } => {
+                1. + (1.
+                    + (1. / 2.
+                        + (1. / 6. + (1. / 24. + (1. / 120. + (1. / 2080.) * x) * x) * x) * x)
+                        * x)
+                    * x
+            }
+            Self::ROW1 { .. } => 1. / (1. - x),
         })
     }
 
@@ -233,7 +237,9 @@ fn solve_euler(
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }
@@ -348,7 +354,9 @@ fn solve_rk4(
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }
@@ -412,7 +420,9 @@ fn solve_implicit_euler(
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }
@@ -512,14 +522,18 @@ fn solve_glrk4(
             .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
         x = x + current_step;
-        y = &y + current_step * (0.5 * k1k2.f_i(0..y_length)? + 0.5 * k1k2.f_i(y_length..2 * y_length)?);
+        y = &y
+            + current_step
+                * (0.5 * k1k2.f_i(0..y_length)? + 0.5 * k1k2.f_i(y_length..2 * y_length)?);
 
         all_x.push(x);
         all_y.push(y.copy());
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }
@@ -714,7 +728,10 @@ fn solve_rkf45(
         let d = (&next_y4 - &next_y5).f_abs()?;
         let e = next_y5.f_abs()? * rtol + atol;
 
-        let alpha = (e / d).f_pow_tensor_scalar(0.2)?.f_min()?.f_double_value(&[])?;
+        let alpha = (e / d)
+            .f_pow_tensor_scalar(0.2)?
+            .f_min()?
+            .f_double_value(&[])?;
         let condition = safety_factor * alpha;
 
         if condition < 1f64 {
@@ -739,7 +756,9 @@ fn solve_rkf45(
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }
@@ -818,7 +837,9 @@ fn solve_row1(
     }
 
     Ok((
-        Tensor::f_from_slice(&all_x)?.to_kind(kind).to_device(device),
+        Tensor::f_from_slice(&all_x)?
+            .to_kind(kind)
+            .to_device(device),
         Tensor::f_stack(&all_y, 0)?,
     ))
 }

@@ -21,9 +21,6 @@ fn test_differentiate_case2() {
 fn test_differentiate_case3() {
     let x = Tensor::from_slice(&[-1.0f32, 1.5f32]);
     let grad = differentiate(&|y| y.i(0).exp() + y.i(1), &x).unwrap();
-    let expected = Tensor::stack(
-        &[Tensor::from(-1f32).exp(), Tensor::from(1f32)],
-        0,
-    );
+    let expected = Tensor::stack(&[Tensor::from(-1f32).exp(), Tensor::from(1f32)], 0);
     assert_eq!(grad, expected);
 }
