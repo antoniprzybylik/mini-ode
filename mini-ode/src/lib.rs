@@ -916,20 +916,66 @@ fn compute_jacobian<F>(f: F, x: &Tensor) -> anyhow::Result<Tensor>
 where
     F: Fn(&Tensor) -> Tensor,
 {
-    assert_eq!(x.dim(), 1, "x must be 1-dimensional");
-    let mut x_with_grad = x.detach().copy().set_requires_grad(true);
+    if x.dim() != 1 {
+        return Err(anyhow!(
+            "Jacobian input tensor must be one-dimensional, got {} dimensions",
+            x.dim()
+        ));
+    }
+
+    let x_with_grad = x.detach().copy().set_requires_grad(true);
+
     let y = f(&x_with_grad);
-    assert_eq!(y.dim(), 1, "y must be 1-dimensional");
+
+    if y.dim() != 1 {
+        return Err(anyhow!(
+            "Jacobian output tensor must be one-dimensional, got {} dimensions",
+            y.dim()
+        ));
+    }
+
+    if y.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+        return Err(anyhow!(
+            "Jacobian function returned tensor containing non-finite values"
+        ));
+    }
 
     let y_size = y.size()[0];
-    let mut grads = Vec::new();
+    let mut grads = Vec::with_capacity(y_size as usize);
 
     for i in 0..y_size {
         let yi = y.i(i);
-        let grad = Tensor::f_run_backward(&[yi], &[&x_with_grad], true, false)?[0].copy();
+
+        let grad = Tensor::f_run_backward(&[yi], &[&x_with_grad], true, false)?
+            .first()
+            .ok_or_else(|| anyhow!("Failed to compute Jacobian gradient"))?
+            .copy();
+
+        if grad.size() != x.size() {
+            return Err(anyhow!(
+                "Jacobian gradient has shape {:?}, expected shape {:?}",
+                grad.size(),
+                x.size()
+            ));
+        }
+
+        if grad.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+            return Err(anyhow!("Jacobian computation produced non-finite values"));
+        }
+
         grads.push(grad);
-        x_with_grad.zero_grad();
     }
 
-    Ok(Tensor::f_stack(&grads, 0)?)
+    let jacobian = Tensor::f_stack(&grads, 0)?;
+
+    if jacobian.size() != vec![y_size, x.size()[0]] {
+        return Err(anyhow!(
+            "Jacobian has shape {:?}, expected shape [{}, {}]",
+            jacobian.size(),
+            y_size,
+            x.size()[0]
+        ));
+    }
+
+    Ok(jacobian)
 }
