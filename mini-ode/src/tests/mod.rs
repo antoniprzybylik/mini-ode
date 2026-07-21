@@ -1,5 +1,6 @@
 mod compute_jacobian;
 mod mock_optimizer;
+mod ode_solvers_stability;
 mod ode_solving;
 mod optimizer_display;
 mod optimizers_derivative_tensors_123_helper;
