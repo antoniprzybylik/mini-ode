@@ -127,6 +127,34 @@ impl Solver {
             Self::ROW1 { step } => solve_row1(f, x_span, y0, *step),
         }
     }
+
+    pub fn stability_function(&self, x: f64) -> anyhow::Result<f64> {
+        if x > 0. {
+            anyhow::bail!(
+                "Stability function is not defined for positive numbers."
+            );
+        }
+
+        Ok(match self {
+            Self::Euler { .. } => 1. + x,
+            Self::RK4 { .. } => 1. + (1. + (1./2. + (1./6. + (1./24.)*x)*x)*x)*x,
+            Self::ImplicitEuler { .. } => 1./(1.-x),
+            Self::GLRK4 { .. } => (1. + x/2. + x*x/12.)/(1. - x/2. + x*x/12.),
+            Self::RKF45 { .. } => 1. + (1. + (1./2. + (1./6. + (1./24. + (1./120. + (1./2080.)*x)*x)*x)*x)*x)*x,
+            Self::ROW1 { .. } => 1./(1.-x),
+        })
+    }
+
+    pub fn stability_constant(&self) -> f64 {
+        match self {
+            Self::Euler { .. } => 2f64,
+            Self::RK4 { .. } => 2.785293563f64,
+            Self::ImplicitEuler { .. } => f64::INFINITY,
+            Self::GLRK4 { .. } => f64::INFINITY,
+            Self::RKF45 { .. } => 3.677706621f64,
+            Self::ROW1 { .. } => f64::INFINITY,
+        }
+    }
 }
 
 impl fmt::Display for Solver {
@@ -477,7 +505,6 @@ fn solve_glrk4(
                                 * current_step,
                         ])
                         .unwrap();
-
                     diff1.dot(&diff1) + diff2.dot(&diff2)
                 },
                 &first_k1k2_guess,
