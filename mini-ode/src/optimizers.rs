@@ -24,6 +24,17 @@ pub trait Optimizer: Send + Sync + fmt::Display {
     -> anyhow::Result<Tensor>;
 }
 
+/// Helper function to validate that optimizer output is finite
+fn validate_optimizer_output(tensor: &Tensor, optimizer_name: &str) -> anyhow::Result<()> {
+    if tensor.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+        anyhow::bail!(
+            "Optimizer {} produced non-finite result (NaN/Inf)",
+            optimizer_name
+        );
+    }
+    Ok(())
+}
+
 /// Newton optimization algorithm
 ///
 /// This struct configures the Newton method, a second-order optimizer that uses the
@@ -125,6 +136,10 @@ pub(crate) fn differentiate(
     }
 
     let gradient = tch::Tensor::f_run_backward(&[y], &[x_with_grad], false, false)?[0].copy();
+
+    // Note: We don't validate here because gradients can legitimately be non-finite
+    // during exploration; caller will validate final result
+
     Ok(gradient)
 }
 
@@ -330,7 +345,7 @@ fn choose_step_golden_section(
     } else {
         atol * 15.
     };
-    // Forward search
+    // Forward search - continues even if non-finite encountered (gentle handling)
     let mut fx = function(&(x0 + direction * x2)).f_double_value(&[])?;
     while fx <= fx1 {
         let new_x2 = x1 + (x2 - x1) * PHI2;
@@ -389,6 +404,7 @@ fn choose_step_backtracking(
     let fx0 = function(&x0).f_double_value(&[])?;
 
     let mut t = 1f64;
+    // Gentle handling: backtracks when encountering non-finite values
     while {
         let fx = function(&(x0 + direction * t)).f_double_value(&[])?;
 
@@ -463,6 +479,8 @@ impl Optimizer for CG {
             // Stop if gradient is smaller than `gtol`
             if let Some(gtol) = self.gtol {
                 if grad.norm().f_double_value(&[])? < gtol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "CG")?;
                     return Ok(x);
                 }
             } else {
@@ -470,6 +488,8 @@ impl Optimizer for CG {
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
                 if grad.norm().f_double_value(&[])? == 0. {
+                    // Final result validation
+                    validate_optimizer_output(&x, "CG")?;
                     return Ok(x);
                 }
             }
@@ -516,6 +536,7 @@ impl Optimizer for CG {
                 P0.max(prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 1000.);
 
             // Choose step in direction `direction`
+            // Note: golden section handles non-finite gracefully during search
             let step = choose_step_golden_section(&x, &direction, &function, linesearch_atol)?;
 
             // Update previous step norms
@@ -530,6 +551,8 @@ impl Optimizer for CG {
             let y = function(&x);
             if let (Some(prev_y), Some(ftol)) = (prev_y, self.ftol) {
                 if (&prev_y - &y).f_double_value(&[])? < ftol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "CG")?;
                     return Ok(x);
                 }
             }
@@ -540,6 +563,8 @@ impl Optimizer for CG {
             prev_direction = direction;
         }
 
+        // Final result validation
+        validate_optimizer_output(&x, "CG")?;
         Ok(x)
     }
 }
@@ -636,6 +661,8 @@ impl Optimizer for BFGS {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
                 if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "BFGS")?;
                     return Ok(x);
                 }
             } else {
@@ -643,6 +670,8 @@ impl Optimizer for BFGS {
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
                 if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
+                    // Final result validation
+                    validate_optimizer_output(&x, "BFGS")?;
                     return Ok(x);
                 }
             }
@@ -655,6 +684,7 @@ impl Optimizer for BFGS {
                 P0.max(prev_step_norm.min(prev2_step_norm).min(prev3_step_norm) / 100.);
 
             // Choose optimal step in given direction using line search
+            // Line search handles non-finite gracefully during search
             let step = choose_step_golden_section(&x, &direction, function, linesearch_atol)?;
 
             // Update previous step norms
@@ -669,6 +699,8 @@ impl Optimizer for BFGS {
             let y = function(&x);
             if let Some(ftol) = self.ftol {
                 if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "BFGS")?;
                     return Ok(x);
                 }
             }
@@ -732,6 +764,8 @@ impl Optimizer for BFGS {
             curr_grad = grad;
         }
 
+        // Final result validation
+        validate_optimizer_output(&x, "BFGS")?;
         Ok(x)
     }
 }
@@ -827,6 +861,8 @@ impl Optimizer for Newton {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
                 if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Newton")?;
                     return Ok(x);
                 }
             } else {
@@ -834,6 +870,8 @@ impl Optimizer for Newton {
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
                 if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Newton")?;
                     return Ok(x);
                 }
             }
@@ -877,6 +915,7 @@ impl Optimizer for Newton {
             };
 
             // Choose optimal step in given direction using line search
+            // Backtracking handles non-finite gracefully during search
             let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9)?;
 
             // Apply step
@@ -886,12 +925,16 @@ impl Optimizer for Newton {
             let y = function(&x);
             if let Some(ftol) = self.ftol {
                 if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Newton")?;
                     return Ok(x);
                 }
             }
             curr_y = y;
         }
 
+        // Final result validation
+        validate_optimizer_output(&x, "Newton")?;
         Ok(x)
     }
 }
@@ -989,6 +1032,8 @@ impl Optimizer for Halley {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
                 if curr_grad.f_norm()?.f_double_value(&[])? < gtol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Halley")?;
                     return Ok(x);
                 }
             } else {
@@ -996,6 +1041,8 @@ impl Optimizer for Halley {
                 // with gradient equal to exactly zero leads to NaN appearing
                 // in the result.
                 if curr_grad.f_norm()?.f_double_value(&[])? == 0. {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Halley")?;
                     return Ok(x);
                 }
             }
@@ -1015,6 +1062,7 @@ impl Optimizer for Halley {
                 .f_reshape([-1])?;
 
             // Choose optimal step in given direction using line search
+            // Backtracking handles non-finite gracefully during search
             let step = choose_step_backtracking(&x, &direction, function, &curr_grad, 0.1, 0.9)?;
 
             // Apply step
@@ -1024,12 +1072,16 @@ impl Optimizer for Halley {
             let y = function(&x);
             if let Some(ftol) = self.ftol {
                 if (curr_y.f_double_value(&[])? - y.f_double_value(&[])?) < ftol {
+                    // Final result validation
+                    validate_optimizer_output(&x, "Halley")?;
                     return Ok(x);
                 }
             }
             curr_y = y;
         }
 
+        // Final result validation
+        validate_optimizer_output(&x, "Halley")?;
         Ok(x)
     }
 }

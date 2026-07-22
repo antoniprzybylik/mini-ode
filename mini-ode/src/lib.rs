@@ -9,6 +9,27 @@ pub mod optimizers;
 #[cfg(test)]
 mod tests;
 
+/// Validates that a tensor contains only finite values.
+/// Returns an error if any NaN or Inf values are detected.
+fn validate_finite_tensor(tensor: &Tensor, context: &str) -> anyhow::Result<()> {
+    if tensor.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+        anyhow::bail!(
+            "Non-finite values (NaN/Inf) detected in {}: tensor shape {:?}",
+            context,
+            tensor.size()
+        );
+    }
+    Ok(())
+}
+
+/// Validates that a scalar value is finite.
+fn validate_finite_scalar(value: f64, context: &str) -> anyhow::Result<()> {
+    if !value.is_finite() {
+        anyhow::bail!("Non-finite value ({}) detected in {}", value, context);
+    }
+    Ok(())
+}
+
 pub enum Solver {
     Euler {
         step: f64,
@@ -104,10 +125,8 @@ impl Solver {
             }
         }
 
-        // Validate y0
-        if y0.isfinite().f_all()?.f_int64_value(&[])? == 0 {
-            return Err(anyhow!("y0 must consist of finite values"));
-        }
+        // Validate y0 - check it's finite
+        validate_finite_tensor(&y0, "initial state y0")?;
 
         let y0_size = y0.size();
 
@@ -165,11 +184,8 @@ impl Solver {
             ));
         }
 
-        if dy.isfinite().f_all()?.f_int64_value(&[])? == 0 {
-            return Err(anyhow!(
-                "Function `f` returns tensor containing non-finite values"
-            ));
-        }
+        // Validate derivative output is finite
+        validate_finite_tensor(&dy, "derivative function output at initial point")?;
 
         match self {
             Self::Euler { step } => solve_euler(f, x_span, y0, *step),
@@ -281,6 +297,10 @@ fn solve_euler(
         }
 
         let dy = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
+
+        // Validate derivative is finite
+        validate_finite_tensor(&dy, "derivative from f(x, y) in Euler step")?;
+
         let dy_size = dy.size();
         let dy_rank = dy_size.len();
         if dy_rank != 1 {
@@ -296,8 +316,17 @@ fn solve_euler(
             );
         }
 
+        // Compute next state
         y = &y + current_step * &dy;
+
+        // Critical: validate new state is finite before proceeding
+        validate_finite_tensor(&y, "state after Euler update (NaN/Inf propagating)")?;
+
         x = &x + current_step;
+
+        // Validate x remains finite
+        let x_tensor = Tensor::from(x).to_kind(kind).to_device(device);
+        validate_finite_tensor(&x_tensor, "integration variable x in Euler step")?;
 
         all_x.push(x);
         all_y.push(y.copy());
@@ -337,7 +366,10 @@ fn solve_rk4(
             current_step = remaining;
         }
 
+        // Stage k1
         let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
+        validate_finite_tensor(&k1, "RK4 stage k1")?;
+
         let k1_size = k1.size();
         let k1_rank = k1_size.len();
         if k1_rank != 1 {
@@ -353,65 +385,54 @@ fn solve_rk4(
             );
         }
 
+        // Stage k2
         let x_half = x + 0.5 * current_step;
         let y_half: Tensor = &y + 0.5 * current_step * &k1;
+        validate_finite_tensor(&y_half, "RK4 intermediate state for k2")?;
+
         let k2 = f.forward_ts(&[Tensor::from(x_half).to_kind(kind).to_device(device), y_half])?;
+        validate_finite_tensor(&k2, "RK4 stage k2")?;
+
         let k2_size = k2.size();
-        let k2_rank = k2_size.len();
-        if k2_rank != 1 {
-            anyhow::bail!(
-                "Derivative CModule returned tensor of bad rank {}.",
-                k2_rank
-            );
-        }
-        if k2_size[0] != y0.size()[0] {
-            anyhow::bail!(
-                "Derivative CModule returned vector of bad length {}.",
-                k2_size[0]
-            );
+        if k2_size.len() != 1 || k2_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of wrong shape at stage k2");
         }
 
+        // Stage k3
         let x_half_again = x + 0.5 * current_step;
         let y_half_again: Tensor = &y + 0.5 * current_step * &k2;
+        validate_finite_tensor(&y_half_again, "RK4 intermediate state for k3")?;
+
         let k3 = f.forward_ts(&[
             Tensor::from(x_half_again).to_kind(kind).to_device(device),
             y_half_again,
         ])?;
+        validate_finite_tensor(&k3, "RK4 stage k3")?;
+
         let k3_size = k3.size();
-        let k3_rank = k3_size.len();
-        if k3_rank != 1 {
-            anyhow::bail!(
-                "Derivative CModule returned tensor of bad rank {}.",
-                k3_rank
-            );
-        }
-        if k3_size[0] != y0.size()[0] {
-            anyhow::bail!(
-                "Derivative CModule returned vector of bad length {}.",
-                k3_size[0]
-            );
+        if k3_size.len() != 1 || k3_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of wrong shape at stage k3");
         }
 
+        // Stage k4
         let x_full = x + current_step;
         let y_full = &y + current_step * &k3;
+        validate_finite_tensor(&y_full, "RK4 intermediate state for k4")?;
+
         let k4 = f.forward_ts(&[Tensor::from(x_full).to_kind(kind).to_device(device), y_full])?;
+        validate_finite_tensor(&k4, "RK4 stage k4")?;
+
         let k4_size = k4.size();
-        let k4_rank = k4_size.len();
-        if k4_rank != 1 {
-            anyhow::bail!(
-                "Derivative CModule returned tensor of bad rank {}.",
-                k4_rank
-            );
-        }
-        if k4_size[0] != y0.size()[0] {
-            anyhow::bail!(
-                "Derivative CModule returned vector of bad length {}.",
-                k4_size[0]
-            );
+        if k4_size.len() != 1 || k4_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of wrong shape at stage k4");
         }
 
+        // Compute next state using weighted average of stages
         let step_div_6 = current_step / 6.0;
         let y_next = &y + step_div_6 * (&k1 + 2.0 * &k2 + 2.0 * &k3 + &k4);
+
+        // Critical validation after full RK4 step
+        validate_finite_tensor(&y_next, "state after RK4 update (NaN/Inf propagating)")?;
 
         x = &x + current_step;
         y = y_next;
@@ -458,26 +479,33 @@ fn solve_implicit_euler(
         let x_next = &x + current_step;
         let y_prev = y.copy();
 
+        // Create derivative function for current x
+        let f_next_fn = |y_next: &Tensor| {
+            let f_next = f
+                .forward_ts(&[
+                    Tensor::from(x_next).to_kind(kind).to_device(device),
+                    y_next.copy(),
+                ])
+                .unwrap();
+            let y_pred = &y_prev + current_step * &f_next;
+            (y_next - &y_pred).pow_tensor_scalar(2).sum(y_next.kind())
+        };
+
+        // Initial guess based on explicit Euler
+        let initial_guess = &y_prev.detach()
+            + current_step
+                * f.forward_ts(&[&Tensor::from(x).to_kind(kind).to_device(device), &y_prev])?;
+
+        // Run optimizer (may fail gracefully internally)
         let y_next = optimizer
-            .optimize(
-                &|y_next: &Tensor| {
-                    let f_next = f
-                        .forward_ts(&[
-                            Tensor::from(x_next).to_kind(kind).to_device(device),
-                            y_next.copy(),
-                        ])
-                        .unwrap();
-                    let y_pred = &y_prev + current_step * &f_next;
-                    (y_next - &y_pred).pow_tensor_scalar(2).sum(y_next.kind())
-                },
-                &(&y_prev.detach()
-                    + current_step
-                        * f.forward_ts(&[
-                            &Tensor::from(x).to_kind(kind).to_device(device),
-                            &y_prev,
-                        ])?),
-            )
-            .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
+            .optimize(&f_next_fn, &initial_guess)
+            .map_err(|err| anyhow!(format!("Implicit solver optimizer failed with: {}", err)))?;
+
+        // Critical: validate optimizer output before accepting
+        validate_finite_tensor(
+            &y_next,
+            "state after implicit solver optimization (NaN/Inf)",
+        )?;
 
         y = y_next.copy();
         x = x_next;
@@ -523,16 +551,11 @@ fn solve_glrk4(
         }
 
         let k = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
+        validate_finite_tensor(&k, "GLRK4 initial derivative")?;
+
         let k_size = k.size();
-        let k_rank = k_size.len();
-        if k_rank != 1 {
-            anyhow::bail!("Derivative CModule returned tensor of bad rank {}.", k_rank);
-        }
-        if k_size[0] != y0.size()[0] {
-            anyhow::bail!(
-                "Derivative CModule returned vector of bad length {}.",
-                k_size[0]
-            );
+        if k_size.len() != 1 || k_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of wrong shape in GLRK4");
         }
 
         const C1: f64 = 0.2113248654f64;
@@ -542,6 +565,7 @@ fn solve_glrk4(
         const A21: f64 = 0.5386751346f64;
         const A22: f64 = 0.25;
 
+        // Initial guess for k1, k2
         let first_k1k2_guess = Tensor::f_cat(
             &[
                 f.forward_ts(&[
@@ -559,39 +583,51 @@ fn solve_glrk4(
             ],
             0,
         )?;
-        let k1k2 = optimizer
-            .optimize(
-                &|k1k2_guess| {
-                    let diff1 = k1k2_guess.i(0..y_length)
-                        - f.forward_ts(&[
-                            Tensor::from(x + C1 * current_step)
-                                .to_kind(kind)
-                                .to_device(device),
-                            &y + (A11 * k1k2_guess.i(0..y_length)
-                                + A12 * k1k2_guess.i(y_length..2 * y_length))
-                                * current_step,
-                        ])
-                        .unwrap();
-                    let diff2 = k1k2_guess.i(y_length..2 * y_length)
-                        - f.forward_ts(&[
-                            Tensor::from(x + C2 * current_step)
-                                .to_kind(kind)
-                                .to_device(device),
-                            &y + (A21 * k1k2_guess.i(0..y_length)
-                                + A22 * k1k2_guess.i(y_length..2 * y_length))
-                                * current_step,
-                        ])
-                        .unwrap();
-                    diff1.dot(&diff1) + diff2.dot(&diff2)
-                },
-                &first_k1k2_guess,
-            )
-            .map_err(|err| anyhow!(format!("Optimizer failed with: {}", err)))?;
 
+        // Define loss function for optimization
+        let loss_fn = |k1k2_guess: &Tensor| {
+            let diff1 = k1k2_guess.i(0..y_length)
+                - f.forward_ts(&[
+                    Tensor::from(x + C1 * current_step)
+                        .to_kind(kind)
+                        .to_device(device),
+                    &y + (A11 * k1k2_guess.i(0..y_length)
+                        + A12 * k1k2_guess.i(y_length..2 * y_length))
+                        * current_step,
+                ])
+                .unwrap();
+            let diff2 = k1k2_guess.i(y_length..2 * y_length)
+                - f.forward_ts(&[
+                    Tensor::from(x + C2 * current_step)
+                        .to_kind(kind)
+                        .to_device(device),
+                    &y + (A21 * k1k2_guess.i(0..y_length)
+                        + A22 * k1k2_guess.i(y_length..2 * y_length))
+                        * current_step,
+                ])
+                .unwrap();
+            diff1.dot(&diff1) + diff2.dot(&diff2)
+        };
+
+        // Run optimizer
+        let k1k2 = optimizer
+            .optimize(&loss_fn, &first_k1k2_guess)
+            .map_err(|err| anyhow!(format!("GLRK4 optimizer failed with: {}", err)))?;
+
+        // Validate optimizer output
+        validate_finite_tensor(
+            &k1k2,
+            "GLRK4 stage coefficients after optimization (NaN/Inf)",
+        )?;
+
+        // Compute final state update
         x = x + current_step;
         y = &y
             + current_step
                 * (0.5 * k1k2.f_i(0..y_length)? + 0.5 * k1k2.f_i(y_length..2 * y_length)?);
+
+        // Validate final state
+        validate_finite_tensor(&y, "state after GLRK4 update (NaN/Inf propagating)")?;
 
         all_x.push(x);
         all_y.push(y.copy());
@@ -635,155 +671,100 @@ fn solve_rkf45(
             step = remaining;
         }
 
+        // Stage k1
         let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
+        validate_finite_tensor(&k1, "RKF45 stage k1")?;
+
         let k1_size = k1.size();
-        let k1_rank = k1_size.len();
-        if k1_rank != 1 {
-            anyhow::bail!(
-                "Derivative CModule returned tensor of bad rank {}.",
-                k1_rank
-            );
-        }
-        if k1_size[0] != y0.size()[0] {
-            anyhow::bail!(
-                "Derivative CModule returned vector of bad length {}.",
-                k1_size[0]
-            );
+        if k1_size.len() != 1 || k1_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
         }
 
-        let k2 = {
-            let x_step = x + 0.25 * step;
-            let y_step: Tensor = &y + 0.25 * &step * &k1;
-            let k2_unchecked =
-                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-            let k2_size = k2_unchecked.size();
-            let k2_rank = k2_size.len();
-            if k2_rank != 1 {
-                anyhow::bail!(
-                    "Derivative CModule returned tensor of bad rank {}.",
-                    k2_rank
-                );
-            }
-            if k2_size[0] != y0.size()[0] {
-                anyhow::bail!(
-                    "Derivative CModule returned vector of bad length {}.",
-                    k2_size[0]
-                );
-            }
+        // Stage k2
+        let x_step = x + 0.25 * step;
+        let y_step: Tensor = &y + 0.25 * &step * &k1;
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k2")?;
 
-            k2_unchecked
-        };
+        let k2 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k2, "RKF45 stage k2")?;
 
-        let k3 = {
-            let x_step = x + 0.375 * step;
-            let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
-            let k3_unchecked =
-                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-            let k3_size = k3_unchecked.size();
-            let k3_rank = k3_size.len();
-            if k3_rank != 1 {
-                anyhow::bail!(
-                    "Derivative CModule returned tensor of bad rank {}.",
-                    k3_rank
-                );
-            }
-            if k3_size[0] != y0.size()[0] {
-                anyhow::bail!(
-                    "Derivative CModule returned vector of bad length {}.",
-                    k3_size[0]
-                );
-            }
+        let k2_size = k2.size();
+        if k2_size.len() != 1 || k2_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
 
-            k3_unchecked
-        };
+        // Stage k3
+        let x_step = x + 0.375 * step;
+        let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k3")?;
 
-        let k4 = {
-            let x_step = x + (12.0 / 13.0) * step;
-            let y_step: Tensor = &y
-                + (1932.0 / 2197.0 * &step * &k1)
-                + (-7200.0 / 2197.0 * &step * &k2)
-                + (7296.0 / 2197.0 * &step * &k3);
-            let k4_unchecked =
-                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-            let k4_size = k4_unchecked.size();
-            let k4_rank = k4_size.len();
-            if k4_rank != 1 {
-                anyhow::bail!(
-                    "Derivative CModule returned tensor of bad rank {}.",
-                    k4_rank
-                );
-            }
-            if k4_size[0] != y0.size()[0] {
-                anyhow::bail!(
-                    "Derivative CModule returned vector of bad length {}.",
-                    k4_size[0]
-                );
-            }
+        let k3 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k3, "RKF45 stage k3")?;
 
-            k4_unchecked
-        };
+        let k3_size = k3.size();
+        if k3_size.len() != 1 || k3_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
 
-        let k5 = {
-            let x_step = x + step;
-            let y_step: Tensor = &y
-                + (439.0 / 216.0 * &step * &k1)
-                + (-8.0 * &step * &k2)
-                + (3680.0 / 513.0 * &step * &k3)
-                + (-845.0 / 4104.0 * &step * &k4);
-            let k5_unchecked =
-                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-            let k5_size = k5_unchecked.size();
-            let k5_rank = k5_size.len();
-            if k5_rank != 1 {
-                anyhow::bail!(
-                    "Derivative CModule returned tensor of bad rank {}.",
-                    k5_rank
-                );
-            }
-            if k5_size[0] != y0.size()[0] {
-                anyhow::bail!(
-                    "Derivative CModule returned vector of bad length {}.",
-                    k5_size[0]
-                );
-            }
+        // Stage k4
+        let x_step = x + (12.0 / 13.0) * step;
+        let y_step: Tensor = &y
+            + (1932.0 / 2197.0 * &step * &k1)
+            + (-7200.0 / 2197.0 * &step * &k2)
+            + (7296.0 / 2197.0 * &step * &k3);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k4")?;
 
-            k5_unchecked
-        };
+        let k4 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k4, "RKF45 stage k4")?;
 
-        let k6 = {
-            let x_step = x + 0.5 * step;
-            let y_step: Tensor = &y
-                + (-8.0 / 27.0 * &step * &k1)
-                + (2.0 * &step * &k2)
-                + (-3544.0 / 2565.0 * &step * &k3)
-                + (1859.0 / 4104.0 * &step * &k4)
-                + (-11.0 / 40.0 * &step * &k5);
-            let k6_unchecked =
-                f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-            let k6_size = k6_unchecked.size();
-            let k6_rank = k6_size.len();
-            if k6_rank != 1 {
-                anyhow::bail!(
-                    "Derivative CModule returned tensor of bad rank {}.",
-                    k6_rank
-                );
-            }
-            if k6_size[0] != y0.size()[0] {
-                anyhow::bail!(
-                    "Derivative CModule returned vector of bad length {}.",
-                    k6_size[0]
-                );
-            }
+        let k4_size = k4.size();
+        if k4_size.len() != 1 || k4_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
 
-            k6_unchecked
-        };
+        // Stage k5
+        let x_step = x + step;
+        let y_step: Tensor = &y
+            + (439.0 / 216.0 * &step * &k1)
+            + (-8.0 * &step * &k2)
+            + (3680.0 / 513.0 * &step * &k3)
+            + (-845.0 / 4104.0 * &step * &k4);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k5")?;
 
+        let k5 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k5, "RKF45 stage k5")?;
+
+        let k5_size = k5.size();
+        if k5_size.len() != 1 || k5_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k6
+        let x_step = x + 0.5 * step;
+        let y_step: Tensor = &y
+            + (-8.0 / 27.0 * &step * &k1)
+            + (2.0 * &step * &k2)
+            + (-3544.0 / 2565.0 * &step * &k3)
+            + (1859.0 / 4104.0 * &step * &k4)
+            + (-11.0 / 40.0 * &step * &k5);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k6")?;
+
+        let k6 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k6, "RKF45 stage k6")?;
+
+        let k6_size = k6.size();
+        if k6_size.len() != 1 || k6_size[0] != y0.size()[0] {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Compute 4th and 5th order solutions
         let next_y4: Tensor = &y
             + step
                 * ((25.0 / 216.0 * &k1)
                     + (1408.0 / 2565.0 * &k3)
                     + (2197.0 / 4104.0 * &k4)
                     + (-1.0 / 5.0 * &k5));
+
         let next_y5: Tensor = &y
             + step
                 * ((16.0 / 135.0 * &k1)
@@ -792,23 +773,40 @@ fn solve_rkf45(
                     + (-9.0 / 50.0 * &k5)
                     + (2.0 / 55.0 * &k6));
 
+        // Compute error estimate
         let d = (&next_y4 - &next_y5).f_abs()?;
-        let e = next_y5.f_abs()? * rtol + atol;
+        validate_finite_tensor(&d, "RKF45 error estimate difference")?;
 
+        let e = next_y5.f_abs()? * rtol + atol;
+        validate_finite_tensor(&e, "RKF45 error tolerance combination")?;
+
+        // Compute step size adjustment
         let alpha = (e / d)
             .f_pow_tensor_scalar(0.2)?
             .f_min()?
             .f_double_value(&[])?;
+
+        validate_finite_scalar(alpha, "RKF45 step size scaling factor alpha")?;
+
         let condition = safety_factor * alpha;
+        validate_finite_scalar(condition, "RKF45 condition factor")?;
 
         if condition < 1f64 {
             step = step * condition;
+            validate_finite_scalar(step, "RKF45 reduced step size")?;
+
             if step < min_step {
                 return Err(anyhow!("Required step is smaller than minimal step"));
             }
         } else {
+            // Accept the step
             y = next_y5;
             x = &x + &step;
+
+            // Validate accepted state
+            validate_finite_tensor(&y, "RKF45 accepted state (NaN/Inf)")?;
+            validate_finite_scalar(x, "RKF45 updated integration variable")?;
+
             all_x.push(x);
             all_y.push(y.copy());
 
@@ -817,8 +815,10 @@ fn solve_rkf45(
             step = match new_step.partial_cmp(&max_step) {
                 Some(std::cmp::Ordering::Less) => new_step,
                 Some(_) => max_step,
-                None => return Err(anyhow!("Runtime error")),
+                None => return Err(anyhow!("Runtime error: non-finite step comparison")),
             };
+
+            validate_finite_scalar(step, "RKF45 next step size")?;
         }
     }
 
@@ -859,6 +859,7 @@ fn solve_row1(
         let x_prev = x;
         let y_prev = y.copy();
 
+        // Compute Jacobian
         let jacobian = compute_jacobian(
             |y| {
                 f.forward_ts(&[
@@ -869,10 +870,18 @@ fn solve_row1(
             },
             &y_prev,
         )?;
+
+        // Validate Jacobian is finite
+        validate_finite_tensor(&jacobian, "Jacobian matrix in ROW1 (NaN/Inf)")?;
+
+        // Evaluate function at current point
         let f_current = f.forward_ts(&[
             Tensor::from(x_prev).to_kind(kind).to_device(device),
             y_prev.copy(),
         ])?;
+
+        validate_finite_tensor(&f_current, "derivative function output in ROW1")?;
+
         let f_current_size = f_current.size();
         let f_current_rank = f_current_size.len();
         if f_current_rank != 1 {
@@ -888,15 +897,25 @@ fn solve_row1(
             );
         }
 
+        // Compute (I - h*J)^(-1) * f
         let n = jacobian.size()[0];
         let eye = Tensor::f_eye(n, (jacobian.kind(), jacobian.device()))?;
         let step_j = current_step * &jacobian;
         let inv_matrix = (eye - step_j).f_inverse()?;
 
+        validate_finite_tensor(&inv_matrix, "inverse matrix (I - h*J)^(-1) in ROW1")?;
+
         let delta_y = inv_matrix.f_matmul(&f_current)?;
+        validate_finite_tensor(&delta_y, "Newton correction step in ROW1")?;
+
         let y_next = y_prev + current_step * delta_y;
 
+        // Critical validation after ROW1 update
+        validate_finite_tensor(&y_next, "state after ROW1 update (NaN/Inf)")?;
+
         x = &x_prev + current_step;
+        validate_finite_scalar(x, "ROW1 updated integration variable")?;
+
         y = y_next.detach().copy();
 
         all_x.push(x);

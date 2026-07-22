@@ -130,11 +130,13 @@ fn test_euler_instability_van_der_pol_stiff() {
     let bound = 1e10;
 
     let solver = Solver::Euler { step };
-    let (_xs, ys) = solver.solve(model, x_span, y0).unwrap();
-    assert!(
-        !solution_is_bounded(&ys, bound),
-        "Euler should blow up on stiff van der Pol (μ={mu}, h={step})"
-    );
+    match solver.solve(model, x_span, y0) {
+        Err(msg) => assert!(msg.to_string().contains("Non-finite")),
+        Ok((_xs, ys)) => assert!(
+            !solution_is_bounded(&ys, bound),
+            "Euler should blow up on stiff van der Pol (μ={mu}, h={step})"
+        ),
+    };
 }
 
 #[test]
@@ -233,11 +235,13 @@ fn test_rk4_instability_van_der_pol_stiff() {
     let bound = 50.0;
 
     let solver = Solver::RK4 { step };
-    let (_xs, ys) = solver.solve(model, x_span, y0).unwrap();
-    assert!(
-        !solution_is_bounded(&ys, bound),
-        "RK4 should blow up on stiff van der Pol (μ={mu}, h={step})"
-    );
+    match solver.solve(model, x_span, y0) {
+        Err(msg) => assert!(msg.to_string().contains("Non-finite")),
+        Ok((_xs, ys)) => assert!(
+            !solution_is_bounded(&ys, bound),
+            "RK4 should blow up on stiff van der Pol (μ={mu}, h={step})"
+        ),
+    };
 }
 
 #[test]
