@@ -11,9 +11,12 @@ readme.workspace = true
 [dependencies]
 tch = "0.24.0"
 anyhow = "1.0.103"
+tracing = { version = "0.1.44", optional = true }
 
 [features]
+default = []
 doc = ["tch/doc-only"]
+warnings = ["dep:tracing"]
 
 [lints]
 workspace = true

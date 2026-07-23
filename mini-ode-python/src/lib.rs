@@ -5,6 +5,10 @@ use pyo3_tch::PyTensor;
 use std::io::Cursor;
 use std::sync::Arc;
 
+mod tracing;
+use std::sync::Once;
+use tracing::tracing_init;
+
 #[derive(Clone)]
 #[pyclass(module = "rust.optimizers", name = "Optimizer")]
 struct PyOptimizer(Arc<dyn Optimizer + Send + Sync>);
@@ -24,15 +28,9 @@ impl PyOptimizer {
     name = "CG",
     signature = (max_steps, gtol=None, ftol=None)
 )]
-fn create_cg(
-    max_steps: usize,
-    gtol: Option<f64>,
-    ftol: Option<f64>,
-) -> PyOptimizer {
+fn create_cg(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::CG::new(
-        max_steps,
-        gtol,
-        ftol,
+        max_steps, gtol, ftol,
     )))
 }
 
@@ -40,15 +38,9 @@ fn create_cg(
     name = "BFGS",
     signature = (max_steps, gtol=None, ftol=None)
 )]
-fn create_bfgs(
-    max_steps: usize,
-    gtol: Option<f64>,
-    ftol: Option<f64>,
-) -> PyOptimizer {
+fn create_bfgs(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::BFGS::new(
-        max_steps,
-        gtol,
-        ftol,
+        max_steps, gtol, ftol,
     )))
 }
 
@@ -56,15 +48,9 @@ fn create_bfgs(
     name = "Newton",
     signature = (max_steps, gtol=None, ftol=None)
 )]
-fn create_newton(
-    max_steps: usize,
-    gtol: Option<f64>,
-    ftol: Option<f64>,
-) -> PyOptimizer {
+fn create_newton(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::Newton::new(
-        max_steps,
-        gtol,
-        ftol,
+        max_steps, gtol, ftol,
     )))
 }
 
@@ -72,15 +58,9 @@ fn create_newton(
     name = "Halley",
     signature = (max_steps, gtol=None, ftol=None)
 )]
-fn create_halley(
-    max_steps: usize,
-    gtol: Option<f64>,
-    ftol: Option<f64>,
-) -> PyOptimizer {
+fn create_halley(max_steps: usize, gtol: Option<f64>, ftol: Option<f64>) -> PyOptimizer {
     PyOptimizer(Arc::new(mini_ode::optimizers::Halley::new(
-        max_steps,
-        gtol,
-        ftol,
+        max_steps, gtol, ftol,
     )))
 }
 
@@ -143,17 +123,13 @@ impl PySolver {
         })
     }
 
-    fn stability_function(
-        &self,
-        x: f64
-    ) -> PyResult<f64> {
-        self.0.stability_function(x)
+    fn stability_function(&self, x: f64) -> PyResult<f64> {
+        self.0
+            .stability_function(x)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
-    fn stability_constant(
-        &self
-    ) -> f64 {
+    fn stability_constant(&self) -> f64 {
         self.0.stability_constant()
     }
 
@@ -173,7 +149,10 @@ impl PySolver {
                 if let Some(step) = get_step(&self.0) {
                     Ok(step.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
             "optimizer" => {
@@ -181,38 +160,56 @@ impl PySolver {
                     let py_optimizer = PyOptimizer(optimizer_inner);
                     Ok(py_optimizer.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
             "rtol" => {
                 if let Some(rtol) = get_rtol(&self.0) {
                     Ok(rtol.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
             "atol" => {
                 if let Some(atol) = get_atol(&self.0) {
                     Ok(atol.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
             "min_step" => {
                 if let Some(min_step) = get_min_step(&self.0) {
                     Ok(min_step.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
             "safety_factor" => {
                 if let Some(safety_factor) = get_safety_factor(&self.0) {
                     Ok(safety_factor.into_pyobject(py)?.into())
                 } else {
-                    Err(pyo3::exceptions::PyAttributeError::new_err(format!("This solver has no attribute '{}'", name)))
+                    Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                        "This solver has no attribute '{}'",
+                        name
+                    )))
                 }
             }
-            _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!("'Solver' object has no attribute '{}'", name))),
+            _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                "'Solver' object has no attribute '{}'",
+                name
+            ))),
         }
     }
 
@@ -249,8 +246,11 @@ impl PySolver {
 
         // Solver specific attributes
         match &self.0 {
-            Solver::Euler { .. } | Solver::RK4 { .. } | Solver::ImplicitEuler { .. }
-            | Solver::GLRK4 { .. } | Solver::ROW1 { .. } => attrs.push("step".to_string()),
+            Solver::Euler { .. }
+            | Solver::RK4 { .. }
+            | Solver::ImplicitEuler { .. }
+            | Solver::GLRK4 { .. }
+            | Solver::ROW1 { .. } => attrs.push("step".to_string()),
             Solver::RKF45 { .. } => {
                 attrs.push("rtol".to_string());
                 attrs.push("atol".to_string());
@@ -290,19 +290,35 @@ fn has_optimizer(solver: &Solver) -> bool {
 }
 
 fn get_rtol(solver: &Solver) -> Option<f64> {
-    if let Solver::RKF45 { rtol, .. } = solver { Some(*rtol) } else { None }
+    if let Solver::RKF45 { rtol, .. } = solver {
+        Some(*rtol)
+    } else {
+        None
+    }
 }
 
 fn get_atol(solver: &Solver) -> Option<f64> {
-    if let Solver::RKF45 { atol, .. } = solver { Some(*atol) } else { None }
+    if let Solver::RKF45 { atol, .. } = solver {
+        Some(*atol)
+    } else {
+        None
+    }
 }
 
 fn get_min_step(solver: &Solver) -> Option<f64> {
-    if let Solver::RKF45 { min_step, .. } = solver { Some(*min_step) } else { None }
+    if let Solver::RKF45 { min_step, .. } = solver {
+        Some(*min_step)
+    } else {
+        None
+    }
 }
 
 fn get_safety_factor(solver: &Solver) -> Option<f64> {
-    if let Solver::RKF45 { safety_factor, .. } = solver { Some(*safety_factor) } else { None }
+    if let Solver::RKF45 { safety_factor, .. } = solver {
+        Some(*safety_factor)
+    } else {
+        None
+    }
 }
 
 #[pyfunction(name = "EulerMethodSolver")]
@@ -363,6 +379,8 @@ fn convert_function<'py>(py: Python<'py>, f: &Bound<'py, PyAny>) -> PyResult<tch
     })
 }
 
+static TRACING_INIT: Once = Once::new();
+
 #[pymodule]
 fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_euler_solver, m)?)?;
@@ -378,5 +396,9 @@ fn rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySolver>()?;
     m.add_class::<PyOptimizer>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
+    // Initialize tracing
+    TRACING_INIT.call_once(tracing_init);
+
     Ok(())
 }

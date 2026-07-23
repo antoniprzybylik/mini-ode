@@ -6,6 +6,14 @@ use anyhow::anyhow;
 use std::fmt;
 use tch::{IndexOp, Tensor};
 
+#[cfg(feature = "warnings")]
+use tracing::warn;
+
+#[cfg(not(feature = "warnings"))]
+macro_rules! warn {
+    ($($arg:tt)*) => {};
+}
+
 /// Optimizer interface common for any optimizer in the library
 pub trait Optimizer: Send + Sync + fmt::Display {
     /// Solves the problem of optimization of function `function` starting from point `x0`
@@ -347,6 +355,7 @@ fn choose_step_golden_section(
     };
     // Forward search - continues even if non-finite encountered (gentle handling)
     let mut fx = function(&(x0 + direction * x2)).f_double_value(&[])?;
+    let mut forward_iters: u32 = 0;
     while fx <= fx1 {
         let new_x2 = x1 + (x2 - x1) * PHI2;
         fx = function(&(x0 + direction * new_x2)).f_double_value(&[])?;
@@ -354,13 +363,16 @@ fn choose_step_golden_section(
             break;
         }
         x2 = new_x2;
+        forward_iters += 1;
     }
 
     x3 = x2 - (x2 - x1) * RPHI;
     x4 = x1 + (x2 - x1) * RPHI;
     fx3 = function(&(x0 + direction * x3)).f_double_value(&[])?;
     fx4 = function(&(x0 + direction * x4)).f_double_value(&[])?;
-    while x2 - x1 > atol {
+
+    let mut refine_iters: u32 = 0;
+    while x2 - x1 > atol && refine_iters < 500 {
         if fx3 < fx4 {
             x2 = x4;
 
@@ -376,6 +388,22 @@ fn choose_step_golden_section(
             x4 = x1 + (x2 - x1) * RPHI;
             fx4 = function(&(x0 + direction * x4)).f_double_value(&[])?;
         }
+        refine_iters += 1;
+    }
+
+    // Warnings after line search completes
+    if forward_iters >= 100 {
+        warn!(
+            "golden section line search: forward search took {} iterations without bracketing a minimum; direction may be poor",
+            forward_iters
+        );
+    }
+
+    if refine_iters >= 200 {
+        warn!(
+            "golden section line search: refinement took {} iterations; atol may be too small or objective flat",
+            refine_iters
+        );
     }
 
     Ok(direction * ((x1 + x2) / 2.))
@@ -404,7 +432,8 @@ fn choose_step_backtracking(
     let fx0 = function(&x0).f_double_value(&[])?;
 
     let mut t = 1f64;
-    // Gentle handling: backtracks when encountering non-finite values
+    let mut backtrack_iters: u32 = 0;
+
     while {
         let fx = function(&(x0 + direction * t)).f_double_value(&[])?;
 
@@ -421,6 +450,25 @@ fn choose_step_backtracking(
         }
     } {
         t *= beta;
+        backtrack_iters += 1;
+        if t < 1e-30 {
+            break;
+        }
+    }
+
+    // Warnings after line search completes
+    if backtrack_iters >= 100 {
+        warn!(
+            "backtracking line search: {} iterations without satisfying Armijo condition; direction may not be a descent direction",
+            backtrack_iters
+        );
+    }
+
+    if t < 1e-30 {
+        warn!(
+            "backtracking line search: step size collapsed to {:.3e}; optimizer may be stuck",
+            t
+        );
     }
 
     Ok(direction.copy() * t)
@@ -465,6 +513,10 @@ impl Optimizer for CG {
         let mut prev_y: Option<Tensor> = None;
         let mut x = x0.copy();
 
+        let mut warned_nonfinite_grad = false;
+        let mut warned_beta_clamp = false;
+        let mut warned_nonfinite_iter = false;
+
         for step_num in 0..self.max_steps {
             let grad = match differentiate(function, &x) {
                 Ok(grad) => grad,
@@ -475,6 +527,12 @@ impl Optimizer for CG {
                     ));
                 }
             };
+
+            // Warning: non-finite gradient
+            if !warned_nonfinite_grad && grad.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+                warn!("CG: non-finite gradient detected; function may be ill-defined");
+                warned_nonfinite_grad = true;
+            }
 
             // Stop if gradient is smaller than `gtol`
             if let Some(gtol) = self.gtol {
@@ -520,8 +578,12 @@ impl Optimizer for CG {
                             tch::Tensor::f_zeros_like(&beta)?
                         };
                         // Clamp beta to not be too large (this may result in numerical instability)
-                        let beta = if beta.f_double_value(&[])? > 1000000000000. {
-                            tch::Tensor::f_ones_like(&beta)? * 1000000000000.
+                        let beta = if beta.f_double_value(&[])? > 1e12 {
+                            if !warned_beta_clamp {
+                                warn!("CG: beta clamped to 1e12; optimizer may be diverging");
+                                warned_beta_clamp = true;
+                            }
+                            tch::Tensor::f_ones_like(&beta)? * 1e12
                         } else {
                             beta
                         };
@@ -546,6 +608,12 @@ impl Optimizer for CG {
 
             // Apply step
             x = x + step;
+
+            // Warning: non-finite iterate
+            if !warned_nonfinite_iter && x.isfinite().f_all()?.f_int64_value(&[])? == 0 {
+                warn!("CG: non-finite iterate detected; step size may be too large");
+                warned_nonfinite_iter = true;
+            }
 
             // Stop if change in function value is smaller than `ftol`
             let y = function(&x);
@@ -657,6 +725,8 @@ impl Optimizer for BFGS {
             return Err(anyhow!("Output of function `function` must be scalar"));
         }
 
+        let mut warned_inv_hess_large = false;
+
         for _ in 0..self.max_steps {
             // Check for stop condition
             if let Some(gtol) = self.gtol {
@@ -761,6 +831,16 @@ impl Optimizer for BFGS {
                 &(&identity - gamma * gdiff.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?),
             )? + gamma * step.f_reshape([-1, 1])?.f_mm(&step.f_reshape([1, -1])?)?;
 
+            // Warning: large inverse Hessian norm
+            let inv_h_norm = appr_inv_h.f_norm()?.f_double_value(&[])?;
+            if !warned_inv_hess_large && inv_h_norm > 1e10 {
+                warn!(
+                    "BFGS: inverse Hessian approximation norm reached {:.3e}; problem may be ill-conditioned",
+                    inv_h_norm
+                );
+                warned_inv_hess_large = true;
+            }
+
             curr_grad = grad;
         }
 
@@ -847,6 +927,9 @@ impl Optimizer for Newton {
             return Err(anyhow!("Output of function `function` must be scalar"));
         }
 
+        let mut warned_damping_moderate = false;
+        let mut warned_damping_severe = false;
+
         for _ in 0..self.max_steps {
             let (curr_grad, curr_hessian) = match gradient_and_hessian(function, &x) {
                 Ok(gh) => gh,
@@ -903,6 +986,24 @@ impl Optimizer for Newton {
                     Err(_) => {
                         // Hessian is not positive-definite. Try increasing dampening factor.
                         lambda *= 10.;
+
+                        // Warnings for damping levels
+                        if !warned_damping_moderate && lambda >= 1e3 && lambda < 1e7 {
+                            warn!(
+                                "Newton: Hessian required damping factor {:.3e}; problem may be ill-conditioned",
+                                lambda
+                            );
+                            warned_damping_moderate = true;
+                        }
+
+                        if !warned_damping_severe && lambda >= 1e10 {
+                            warn!(
+                                "Newton: Hessian damping factor reached {:.3e}; falling back to pseudoinverse (Hessian is severely ill-conditioned)",
+                                lambda
+                            );
+                            warned_damping_severe = true;
+                        }
+
                         if lambda > 1e10 {
                             // Dampening factor (lambda) exceeded maximum value. Fallback to pseudoinverse.
                             break curr_hessian
@@ -1017,6 +1118,8 @@ impl Optimizer for Halley {
             return Err(anyhow!("Output of function `function` must be scalar"));
         }
 
+        let mut warned_pinv_large = false;
+
         for _ in 0..self.max_steps {
             let (curr_grad, curr_hessian, curr_d3_tensor) =
                 match derivative_tensors_123(function, &x) {
@@ -1049,6 +1152,17 @@ impl Optimizer for Halley {
 
             // Calculate step direction
             let hessian_pinv = curr_hessian.f_linalg_pinv(1e-14, false)?;
+
+            // Warning: large pseudoinverse norm
+            let pinv_norm = hessian_pinv.f_norm()?.f_double_value(&[])?;
+            if !warned_pinv_large && pinv_norm > 1e8 {
+                warn!(
+                    "Halley: Hessian pseudoinverse norm is {:.3e}; Hessian may be ill-conditioned",
+                    pinv_norm
+                );
+                warned_pinv_large = true;
+            }
+
             let neg_newton_dir = hessian_pinv.f_mm(&curr_grad.f_reshape([-1, 1])?)?;
             let direction = -hessian_pinv
                 .f_mm(
