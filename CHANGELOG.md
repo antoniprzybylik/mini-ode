@@ -4,6 +4,31 @@ This documents the main changes in the `mini-ode` project.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.1.5] - 2026-07-23
+### Added
+- Stability function and stability constant added to ODE solver interface (Rust and Python).
+- Warnings system.
+- ODE solvers stability test.
+- Type checking tests.
+- Additional tests and validation checks throughout the codebase.
+- Build instructions for Rust and Python expanded in the README.
+
+### Changed
+- Migrated to PyTorch 2.11.0 and tch-rs 0.24.0.
+- Switched to local extrapolation from active error control in RKF45 solver.
+- Improved step scaling in RKF45 solver.
+- Changed handling of last step in RKF45 solver.
+- Jacobian computation routine now uses the user's tensor kind instead of hardcoded `Float`.
+- Improved validation of solver input.
+- Moved ODE solving test data to separate files.
+- General refactoring and improved error handling throughout the codebase.
+- Updated `.gitignore`.
+
+### Fixed
+- Corrected computation of `alpha` in RKF45 solver.
+- Bug with differentiating constants.
+
 ## [0.1.4] - 2025-11-12
 ### Added
 - Newton and Halley's method optimizers.
