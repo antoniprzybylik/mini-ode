@@ -318,6 +318,8 @@ name = "mini-ode"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "proc-macro2",
+ "syn",
  "tch",
  "tracing",
 ]

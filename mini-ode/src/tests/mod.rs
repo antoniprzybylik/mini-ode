@@ -1,5 +1,6 @@
 mod compute_jacobian;
 mod mock_optimizer;
+mod no_debug_printlns;
 mod ode_solvers_stability;
 mod ode_solving;
 mod optimizer_display;
