@@ -665,6 +665,8 @@ fn solve_rkf45(
 
     let mut step = (x_end - x_start) * 0.1;
 
+    const MAX_GROWTH: f64 = 5.;
+
     while x < x_end {
         let remaining = x_end - x;
         if remaining < step {
@@ -786,10 +788,7 @@ fn solve_rkf45(
             .f_min()?
             .f_double_value(&[])?;
 
-        validate_finite_scalar(alpha, "RKF45 step size scaling factor alpha")?;
-
-        let condition = safety_factor * alpha;
-        validate_finite_scalar(condition, "RKF45 condition factor")?;
+        let condition = (safety_factor * alpha).clamp(0f64, MAX_GROWTH);
 
         if condition < 1f64 {
             step = step * condition;
@@ -810,14 +809,7 @@ fn solve_rkf45(
             all_x.push(x);
             all_y.push(y.copy());
 
-            let new_step = step * condition;
-            let max_step = step * 5.0;
-            step = match new_step.partial_cmp(&max_step) {
-                Some(std::cmp::Ordering::Less) => new_step,
-                Some(_) => max_step,
-                None => return Err(anyhow!("Runtime error: non-finite step comparison")),
-            };
-
+            step = step * condition;
             validate_finite_scalar(step, "RKF45 next step size")?;
         }
     }
