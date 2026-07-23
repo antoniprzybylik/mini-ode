@@ -895,16 +895,6 @@ fn solve_rkf45(
         let e = next_y5.f_abs()? * rtol + atol;
         validate_finite_tensor(&e, "RKF45 error tolerance combination")?;
 
-        // Debug
-        let d_min = d.f_min()?.f_double_value(&[])?;
-        let d_max = d.f_max()?.f_double_value(&[])?;
-        let e_min = e.f_min()?.f_double_value(&[])?;
-        let e_max = e.f_max()?.f_double_value(&[])?;
-        println!(
-            "x={:.17e}, step={:.17e}, d=[{:.3e},{:.3e}], e=[{:.3e},{:.3e}]",
-            x, step, d_min, d_max, e_min, e_max
-        );
-
         // Compute step size adjustment
         let alpha = (e / d)
             .f_pow_tensor_scalar(0.2)?
