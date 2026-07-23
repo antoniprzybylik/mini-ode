@@ -143,6 +143,20 @@ impl PySolver {
         })
     }
 
+    fn stability_function(
+        &self,
+        x: f64
+    ) -> PyResult<f64> {
+        self.0.stability_function(x)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    fn stability_constant(
+        &self
+    ) -> f64 {
+        self.0.stability_constant()
+    }
+
     fn __repr__(&self) -> String {
         let solver_string = format!("{}", self.0);
         let to_insert = "MethodSolver(";
