@@ -641,6 +641,121 @@ fn solve_glrk4(
     ))
 }
 
+/// One RKF45 step
+fn rkf45_step(
+    f: &tch::CModule,
+    x: f64,
+    y: &Tensor,
+    step: f64,
+    device: tch::Device,
+    kind: tch::Kind,
+    y0_length: i64
+) -> anyhow::Result<(Tensor, Tensor)> {
+        // Stage k1
+        let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
+        validate_finite_tensor(&k1, "RKF45 stage k1")?;
+
+        let k1_size = k1.size();
+        if k1_size.len() != 1 || k1_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k2
+        let x_step = x + 0.25 * step;
+        let y_step: Tensor = y + 0.25 * &step * &k1;
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k2")?;
+
+        let k2 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k2, "RKF45 stage k2")?;
+
+        let k2_size = k2.size();
+        if k2_size.len() != 1 || k2_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k3
+        let x_step = x + 0.375 * step;
+        let y_step: Tensor = y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k3")?;
+
+        let k3 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k3, "RKF45 stage k3")?;
+
+        let k3_size = k3.size();
+        if k3_size.len() != 1 || k3_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k4
+        let x_step = x + (12.0 / 13.0) * step;
+        let y_step: Tensor = y
+            + (1932.0 / 2197.0 * &step * &k1)
+            + (-7200.0 / 2197.0 * &step * &k2)
+            + (7296.0 / 2197.0 * &step * &k3);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k4")?;
+
+        let k4 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k4, "RKF45 stage k4")?;
+
+        let k4_size = k4.size();
+        if k4_size.len() != 1 || k4_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k5
+        let x_step = x + step;
+        let y_step: Tensor = y
+            + (439.0 / 216.0 * &step * &k1)
+            + (-8.0 * &step * &k2)
+            + (3680.0 / 513.0 * &step * &k3)
+            + (-845.0 / 4104.0 * &step * &k4);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k5")?;
+
+        let k5 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k5, "RKF45 stage k5")?;
+
+        let k5_size = k5.size();
+        if k5_size.len() != 1 || k5_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Stage k6
+        let x_step = x + 0.5 * step;
+        let y_step: Tensor = y
+            + (-8.0 / 27.0 * &step * &k1)
+            + (2.0 * &step * &k2)
+            + (-3544.0 / 2565.0 * &step * &k3)
+            + (1859.0 / 4104.0 * &step * &k4)
+            + (-11.0 / 40.0 * &step * &k5);
+        validate_finite_tensor(&y_step, "RKF45 intermediate state for k6")?;
+
+        let k6 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
+        validate_finite_tensor(&k6, "RKF45 stage k6")?;
+
+        let k6_size = k6.size();
+        if k6_size.len() != 1 || k6_size[0] != y0_length {
+            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
+        }
+
+        // Compute 4th and 5th order solutions
+        let next_y4: Tensor = y
+            + step
+                * ((25.0 / 216.0 * &k1)
+                    + (1408.0 / 2565.0 * &k3)
+                    + (2197.0 / 4104.0 * &k4)
+                    + (-1.0 / 5.0 * &k5));
+
+        let next_y5: Tensor = y
+            + step
+                * ((16.0 / 135.0 * &k1)
+                    + (6656.0 / 12825.0 * &k3)
+                    + (28561.0 / 56430.0 * &k4)
+                    + (-9.0 / 50.0 * &k5)
+                    + (2.0 / 55.0 * &k6));
+
+        Ok((next_y4, next_y5))
+}
+
 /// Solves ODE using Runge-Kutta-Fehlberg 45 adaptive method
 fn solve_rkf45(
     f: tch::CModule,
@@ -668,112 +783,7 @@ fn solve_rkf45(
     const MAX_GROWTH: f64 = 5.;
 
     while x < x_end {
-        let remaining = x_end - x;
-        if remaining < step {
-            step = remaining;
-        }
-
-        // Stage k1
-        let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
-        validate_finite_tensor(&k1, "RKF45 stage k1")?;
-
-        let k1_size = k1.size();
-        if k1_size.len() != 1 || k1_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Stage k2
-        let x_step = x + 0.25 * step;
-        let y_step: Tensor = &y + 0.25 * &step * &k1;
-        validate_finite_tensor(&y_step, "RKF45 intermediate state for k2")?;
-
-        let k2 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-        validate_finite_tensor(&k2, "RKF45 stage k2")?;
-
-        let k2_size = k2.size();
-        if k2_size.len() != 1 || k2_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Stage k3
-        let x_step = x + 0.375 * step;
-        let y_step: Tensor = &y + (0.09375 * &step * &k1) + (0.28125 * &step * &k2);
-        validate_finite_tensor(&y_step, "RKF45 intermediate state for k3")?;
-
-        let k3 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-        validate_finite_tensor(&k3, "RKF45 stage k3")?;
-
-        let k3_size = k3.size();
-        if k3_size.len() != 1 || k3_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Stage k4
-        let x_step = x + (12.0 / 13.0) * step;
-        let y_step: Tensor = &y
-            + (1932.0 / 2197.0 * &step * &k1)
-            + (-7200.0 / 2197.0 * &step * &k2)
-            + (7296.0 / 2197.0 * &step * &k3);
-        validate_finite_tensor(&y_step, "RKF45 intermediate state for k4")?;
-
-        let k4 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-        validate_finite_tensor(&k4, "RKF45 stage k4")?;
-
-        let k4_size = k4.size();
-        if k4_size.len() != 1 || k4_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Stage k5
-        let x_step = x + step;
-        let y_step: Tensor = &y
-            + (439.0 / 216.0 * &step * &k1)
-            + (-8.0 * &step * &k2)
-            + (3680.0 / 513.0 * &step * &k3)
-            + (-845.0 / 4104.0 * &step * &k4);
-        validate_finite_tensor(&y_step, "RKF45 intermediate state for k5")?;
-
-        let k5 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-        validate_finite_tensor(&k5, "RKF45 stage k5")?;
-
-        let k5_size = k5.size();
-        if k5_size.len() != 1 || k5_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Stage k6
-        let x_step = x + 0.5 * step;
-        let y_step: Tensor = &y
-            + (-8.0 / 27.0 * &step * &k1)
-            + (2.0 * &step * &k2)
-            + (-3544.0 / 2565.0 * &step * &k3)
-            + (1859.0 / 4104.0 * &step * &k4)
-            + (-11.0 / 40.0 * &step * &k5);
-        validate_finite_tensor(&y_step, "RKF45 intermediate state for k6")?;
-
-        let k6 = f.forward_ts(&[Tensor::from(x_step).to_kind(kind).to_device(device), y_step])?;
-        validate_finite_tensor(&k6, "RKF45 stage k6")?;
-
-        let k6_size = k6.size();
-        if k6_size.len() != 1 || k6_size[0] != y0.size()[0] {
-            anyhow::bail!("Derivative CModule returned tensor of bad shape in RKF45");
-        }
-
-        // Compute 4th and 5th order solutions
-        let next_y4: Tensor = &y
-            + step
-                * ((25.0 / 216.0 * &k1)
-                    + (1408.0 / 2565.0 * &k3)
-                    + (2197.0 / 4104.0 * &k4)
-                    + (-1.0 / 5.0 * &k5));
-
-        let next_y5: Tensor = &y
-            + step
-                * ((16.0 / 135.0 * &k1)
-                    + (6656.0 / 12825.0 * &k3)
-                    + (28561.0 / 56430.0 * &k4)
-                    + (-9.0 / 50.0 * &k5)
-                    + (2.0 / 55.0 * &k6));
+        let (next_y4, next_y5) = rkf45_step(&f, x, &y, step, device, kind, y0.size()[0])?;
 
         // Compute error estimate
         let d = (&next_y4 - &next_y5).f_abs()?;
@@ -798,6 +808,18 @@ fn solve_rkf45(
                 return Err(anyhow!("Required step is smaller than minimal step"));
             }
         } else {
+            // Special handling of the last step
+            let remaining = x_end - x;
+            if remaining < step {
+                step = remaining;
+                let (_next_y4, next_y5) = rkf45_step(&f, x, &y, step, device, kind, y0.size()[0])?;
+                y = next_y5;
+                x = x_end;
+                all_x.push(x);
+                all_y.push(y.copy());
+                break;
+            }
+
             // Accept the step
             y = next_y5;
             x = &x + &step;
