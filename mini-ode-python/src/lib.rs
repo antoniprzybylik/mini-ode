@@ -129,10 +129,6 @@ impl PySolver {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
-    fn stability_constant(&self) -> f64 {
-        self.0.stability_constant()
-    }
-
     fn __repr__(&self) -> String {
         let solver_string = format!("{}", self.0);
         let to_insert = "MethodSolver(";
@@ -206,6 +202,9 @@ impl PySolver {
                     )))
                 }
             }
+            "stability_constant" => {
+                Ok(self.0.stability_constant().into_pyobject(py)?.into())
+            }
             _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!(
                 "'Solver' object has no attribute '{}'",
                 name
@@ -242,6 +241,8 @@ impl PySolver {
             "__str__".to_string(),
             "__subclasshook__".to_string(),
             "solve".to_string(),
+            "stability_function".to_string(),
+            "stability_constant".to_string()
         ];
 
         // Solver specific attributes

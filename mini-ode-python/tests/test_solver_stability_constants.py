@@ -35,7 +35,7 @@ import mini_ode
     ],
 )
 def test_stability_constant(solver, expected):
-    actual = solver.stability_constant()
+    actual = solver.stability_constant
 
     if math.isinf(expected):
         assert math.isinf(actual)
