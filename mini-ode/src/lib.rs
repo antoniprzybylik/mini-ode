@@ -297,17 +297,16 @@ fn solve_euler(
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
 
-    let mut current_step = step;
-    let mut step_count: u64 = 0;
-
     let mut warned_large_norm = false;
     let mut warned_many_steps = false;
 
-    while x < x_end {
-        let remaining = x_end - x;
-        if remaining < current_step {
-            current_step = remaining;
-        }
+    let n_steps = ((x_end - x_start) / step).ceil() as usize;
+    for step_no in 0..n_steps {
+        let current_step = if (step_no+1) as f64 * step > x_end {
+            x_end - step_no as f64 * step
+        } else {
+            step
+        };
 
         let dy = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
 
@@ -334,7 +333,11 @@ fn solve_euler(
         // Critical: validate new state is finite before proceeding
         validate_finite_tensor(&y, "state after Euler update (NaN/Inf propagating)")?;
 
-        x = &x + current_step;
+        x = if (step_no + 1) as f64 * step > x_end {
+            x_end
+        } else {
+            (step_no + 1) as f64 * step
+        };
 
         // Validate x remains finite
         let x_tensor = Tensor::from(x).to_kind(kind).to_device(device);
@@ -342,8 +345,6 @@ fn solve_euler(
 
         all_x.push(x);
         all_y.push(y.copy());
-
-        step_count += 1;
 
         let y_norm = y.f_norm()?.f_double_value(&[])?;
 
@@ -355,6 +356,7 @@ fn solve_euler(
             warned_large_norm = true;
         }
 
+        let step_count = step_no+1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "Euler: reached {} steps; consider increasing step size or switching to a higher-order solver",
@@ -391,17 +393,16 @@ fn solve_rk4(
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
 
-    let mut current_step = step;
-    let mut step_count: u64 = 0;
-
     let mut warned_large_norm = false;
     let mut warned_many_steps = false;
 
-    while x < x_end {
-        let remaining = x_end - x;
-        if remaining < current_step {
-            current_step = remaining;
-        }
+    let n_steps = ((x_end - x_start) / step).ceil() as usize;
+    for step_no in 0..n_steps {
+        let current_step = if (step_no+1) as f64 * step > x_end {
+            x_end - step_no as f64 * step
+        } else {
+            step
+        };
 
         // Stage k1
         let k1 = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
@@ -461,13 +462,15 @@ fn solve_rk4(
         // Critical validation after full RK4 step
         validate_finite_tensor(&y_next, "state after RK4 update (NaN/Inf propagating)")?;
 
-        x = &x + current_step;
+        x = if (step_no + 1) as f64 * step > x_end {
+            x_end
+        } else {
+            (step_no + 1) as f64 * step
+        };
         y = y_next;
 
         all_x.push(x);
         all_y.push(y.copy());
-
-        step_count += 1;
 
         let y_norm = y.f_norm()?.f_double_value(&[])?;
 
@@ -479,6 +482,7 @@ fn solve_rk4(
             warned_large_norm = true;
         }
 
+        let step_count = step_no + 1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "RK4: reached {} steps; consider increasing step size or switching to an adaptive solver",
@@ -516,19 +520,22 @@ fn solve_implicit_euler(
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
 
-    let mut current_step = step;
-    let mut step_count: u64 = 0;
-
     let mut warned_large_norm = false;
     let mut warned_many_steps = false;
 
-    while x < x_end {
-        let remaining = x_end - x;
-        if remaining < current_step {
-            current_step = remaining;
-        }
+    let n_steps = ((x_end - x_start) / step).ceil() as usize;
+    for step_no in 0..n_steps {
+        let current_step = if (step_no+1) as f64 * step > x_end {
+            x_end - step_no as f64 * step
+        } else {
+            step
+        };
 
-        let x_next = &x + current_step;
+        let x_next = if (step_no + 1) as f64 * step > x_end {
+            x_end
+        } else {
+            (step_no + 1) as f64 * step
+        };
         let y_prev = y.copy();
 
         // Create derivative function for current x
@@ -565,8 +572,6 @@ fn solve_implicit_euler(
         all_x.push(x);
         all_y.push(y.copy());
 
-        step_count += 1;
-
         let y_norm = y.f_norm()?.f_double_value(&[])?;
 
         if !warned_large_norm && y_norm > 1e10 {
@@ -577,6 +582,7 @@ fn solve_implicit_euler(
             warned_large_norm = true;
         }
 
+        let step_count = step_no + 1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "ImplicitEuler: reached {} steps; consider increasing step size",
@@ -615,17 +621,16 @@ fn solve_glrk4(
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
 
-    let mut current_step = step;
-    let mut step_count: u64 = 0;
-
     let mut warned_large_norm = false;
     let mut warned_many_steps = false;
 
-    while x < x_end {
-        let remaining = x_end - x;
-        if remaining < current_step {
-            current_step = remaining;
-        }
+    let n_steps = ((x_end - x_start) / step).ceil() as usize;
+    for step_no in 0..n_steps {
+        let current_step = if (step_no+1) as f64 * step > x_end {
+            x_end - step_no as f64 * step
+        } else {
+            step
+        };
 
         let k = f.forward_ts(&[Tensor::from(x).to_kind(kind).to_device(device), y.copy()])?;
         validate_finite_tensor(&k, "GLRK4 initial derivative")?;
@@ -698,7 +703,11 @@ fn solve_glrk4(
         )?;
 
         // Compute final state update
-        x = x + current_step;
+        x = if (step_no + 1) as f64 * step > x_end {
+            x_end
+        } else {
+            (step_no + 1) as f64 * step
+        };
         y = &y
             + current_step
                 * (0.5 * k1k2.f_i(0..y_length)? + 0.5 * k1k2.f_i(y_length..2 * y_length)?);
@@ -708,8 +717,6 @@ fn solve_glrk4(
 
         all_x.push(x);
         all_y.push(y.copy());
-
-        step_count += 1;
 
         let y_norm = y.f_norm()?.f_double_value(&[])?;
 
@@ -721,6 +728,7 @@ fn solve_glrk4(
             warned_large_norm = true;
         }
 
+        let step_count = step_no + 1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "GLRK4: reached {} steps; consider increasing step size",
@@ -1009,19 +1017,18 @@ fn solve_row1(
     let mut all_x = vec![x];
     let mut all_y = vec![y.copy()];
 
-    let mut step_count: u64 = 0;
-
     let mut warned_large_matrix = false;
     let mut warned_large_inverse = false;
     let mut warned_large_norm = false;
     let mut warned_many_steps = false;
 
-    while x < x_end {
-        let remaining = x_end - x;
-        let mut current_step = step;
-        if remaining < step {
-            current_step = remaining;
-        }
+    let n_steps = ((x_end - x_start) / step).ceil() as usize;
+    for step_no in 0..n_steps {
+        let current_step = if (step_no+1) as f64 * step > x_end {
+            x_end - step_no as f64 * step
+        } else {
+            step
+        };
 
         let x_prev = x;
         let y_prev = y.copy();
@@ -1102,15 +1109,17 @@ fn solve_row1(
         // Critical validation after ROW1 update
         validate_finite_tensor(&y_next, "state after ROW1 update (NaN/Inf)")?;
 
-        x = &x_prev + current_step;
+        x = if (step_no + 1) as f64 * step > x_end {
+            x_end
+        } else {
+            (step_no + 1) as f64 * step
+        };
         validate_finite_scalar(x, "ROW1 updated integration variable")?;
 
         y = y_next.detach().copy();
 
         all_x.push(x);
         all_y.push(y.copy());
-
-        step_count += 1;
 
         let y_norm = y.f_norm()?.f_double_value(&[])?;
 
@@ -1122,6 +1131,7 @@ fn solve_row1(
             warned_large_norm = true;
         }
 
+        let step_count = step_no + 1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "ROW1: reached {} steps; consider increasing step size",

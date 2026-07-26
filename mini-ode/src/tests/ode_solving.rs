@@ -51,7 +51,6 @@ fn test_solver_euler_case1() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
             .collect::<Vec<f64>>(),
     );
@@ -91,8 +90,61 @@ fn test_solver_euler_case2() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
+            .collect::<Vec<f64>>(),
+    );
+
+    // Check with model run
+    assert!((xs.copy() - test_xs).abs().max().double_value(&[]) <= 1e-14);
+    assert!((ys.copy() - test_ys).abs().max().double_value(&[]) <= 1e-4);
+
+    // Check accuracy
+    assert!(
+        Vec::<f64>::try_from(xs)
+            .unwrap()
+            .into_iter()
+            .zip(Vec::<Vec::<f64>>::try_from(ys).unwrap().into_iter())
+            .all(|(t, y)| {
+                let exact_solution = ode_exact_solution(t);
+                (exact_solution.0 - y[0]).abs() <= 0.5 && (exact_solution.1 - y[1]).abs() <= 0.5
+            })
+    );
+}
+
+#[test]
+fn test_solver_euler_case3_interval_is_not_a_multiplicity_of_step() {
+    use super::ode_solving_data::euler_case3_data::EULER_CASE3_DATA;
+    let test_ys: tch::Tensor = tch::Tensor::from_slice2(&EULER_CASE3_DATA);
+
+    let solver = Solver::Euler { step: 0.1 };
+
+    let y0 = Tensor::from_slice(&[-0.2f64, 0.1f64]);
+    let mut closure = |inputs: &[Tensor]| {
+        let _x = &inputs[0];
+        let y = &inputs[1];
+        let y0 = y.get(0);
+        let y1 = y.get(1);
+
+        let dy0 = y1;
+        let dy1 = &y0 - &y0.pow_tensor_scalar(3.0);
+
+        vec![Tensor::stack(&[dy0, dy1], 0)]
+    };
+    let model = CModule::create_by_tracing(
+        "ode_fn",
+        "forward",
+        &[Tensor::from(0.0), y0.shallow_clone()],
+        &mut closure,
+    )
+    .unwrap();
+
+    let x_span = (0.0, 6.45);
+    let (xs, ys) = solver.solve(model, x_span, y0).unwrap();
+    let test_xs = tch::Tensor::from_slice(
+        &(0..65)
+            .into_iter()
+            .map(|n| (n as f64) * 0.1)
+            .chain([6.45].into_iter())
             .collect::<Vec<f64>>(),
     );
 
@@ -145,7 +197,6 @@ fn test_solver_rk4_case1() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
             .collect::<Vec<f64>>(),
     );
@@ -202,8 +253,65 @@ fn test_solver_implicit_euler_case1() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
+            .collect::<Vec<f64>>(),
+    );
+
+    // Check with model run
+    assert!((xs.copy() - test_xs).abs().max().double_value(&[]) <= 1e-14);
+    assert!((ys.copy() - test_ys).abs().max().double_value(&[]) <= 8e-5);
+
+    // Check accuracy
+    assert!(
+        Vec::<f64>::try_from(xs)
+            .unwrap()
+            .into_iter()
+            .zip(Vec::<Vec::<f64>>::try_from(ys).unwrap().into_iter())
+            .all(|(t, y)| {
+                let exact_solution = ode_exact_solution(t);
+                (exact_solution.0 - y[0]).abs() <= 0.4 && (exact_solution.1 - y[1]).abs() <= 0.4
+            })
+    );
+}
+
+#[test]
+fn test_solver_implicit_euler_case2_interval_is_not_a_multiplicity_of_step() {
+    use super::ode_solving_data::implicit_euler_case2_data::IMPLICIT_EULER_CASE2_DATA;
+    let test_ys: tch::Tensor = tch::Tensor::from_slice2(&IMPLICIT_EULER_CASE2_DATA);
+
+    let optimizer = Arc::new(optimizers::CG::new(100, Some(1e-6), Some(1e-6)));
+    let solver = Solver::ImplicitEuler {
+        step: 0.1,
+        optimizer,
+    };
+
+    let y0 = Tensor::from_slice(&[-0.2f64, 0.1f64]);
+    let mut closure = |inputs: &[Tensor]| {
+        let _x = &inputs[0];
+        let y = &inputs[1];
+        let y0 = y.get(0);
+        let y1 = y.get(1);
+
+        let dy0 = y1;
+        let dy1 = &y0 - &y0.pow_tensor_scalar(3.0);
+
+        vec![Tensor::stack(&[dy0, dy1], 0)]
+    };
+    let model = CModule::create_by_tracing(
+        "ode_fn",
+        "forward",
+        &[Tensor::from(0.0), y0.shallow_clone()],
+        &mut closure,
+    )
+    .unwrap();
+
+    let x_span = (0.0, 6.45);
+    let (xs, ys) = solver.solve(model, x_span, y0).unwrap();
+    let test_xs = tch::Tensor::from_slice(
+        &(0..65)
+            .into_iter()
+            .map(|n| (n as f64) * 0.1)
+            .chain([6.45].into_iter())
             .collect::<Vec<f64>>(),
     );
 
@@ -260,7 +368,6 @@ fn test_solver_glrk4_case1() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
             .collect::<Vec<f64>>(),
     );
@@ -364,7 +471,6 @@ fn test_solver_row1_case1() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f64) * 0.1)
             .collect::<Vec<f64>>(),
     );
@@ -418,7 +524,6 @@ fn test_solver_row1_case2() {
     let test_xs = tch::Tensor::from_slice(
         &(0..66)
             .into_iter()
-            .chain(65..=65)
             .map(|n| (n as f32) * 0.1)
             .collect::<Vec<f32>>(),
     );
