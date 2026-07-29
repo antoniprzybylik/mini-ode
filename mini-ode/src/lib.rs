@@ -302,8 +302,8 @@ fn solve_euler(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if (step_no+1) as f64 * step > x_end {
-            x_end - step_no as f64 * step
+        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+            x_end - (x_start + step_no as f64 * step)
         } else {
             step
         };
@@ -333,10 +333,10 @@ fn solve_euler(
         // Critical: validate new state is finite before proceeding
         validate_finite_tensor(&y, "state after Euler update (NaN/Inf propagating)")?;
 
-        x = if (step_no + 1) as f64 * step > x_end {
+        x = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end
         } else {
-            (step_no + 1) as f64 * step
+            x_start + (step_no + 1) as f64 * step
         };
 
         // Validate x remains finite
@@ -398,8 +398,8 @@ fn solve_rk4(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if (step_no+1) as f64 * step > x_end {
-            x_end - step_no as f64 * step
+        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+            x_end - (x_start + step_no as f64 * step)
         } else {
             step
         };
@@ -462,10 +462,10 @@ fn solve_rk4(
         // Critical validation after full RK4 step
         validate_finite_tensor(&y_next, "state after RK4 update (NaN/Inf propagating)")?;
 
-        x = if (step_no + 1) as f64 * step > x_end {
+        x = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end
         } else {
-            (step_no + 1) as f64 * step
+            x_start + (step_no + 1) as f64 * step
         };
         y = y_next;
 
@@ -525,16 +525,16 @@ fn solve_implicit_euler(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if (step_no+1) as f64 * step > x_end {
-            x_end - step_no as f64 * step
+        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+            x_end - (x_start + step_no as f64 * step)
         } else {
             step
         };
 
-        let x_next = if (step_no + 1) as f64 * step > x_end {
+        let x_next = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end
         } else {
-            (step_no + 1) as f64 * step
+            x_start + (step_no + 1) as f64 * step
         };
         let y_prev = y.copy();
 
@@ -626,8 +626,8 @@ fn solve_glrk4(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if (step_no+1) as f64 * step > x_end {
-            x_end - step_no as f64 * step
+        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+            x_end - (x_start + step_no as f64 * step)
         } else {
             step
         };
@@ -703,10 +703,10 @@ fn solve_glrk4(
         )?;
 
         // Compute final state update
-        x = if (step_no + 1) as f64 * step > x_end {
+        x = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end
         } else {
-            (step_no + 1) as f64 * step
+            x_start + (step_no + 1) as f64 * step
         };
         y = &y
             + current_step
@@ -1024,8 +1024,8 @@ fn solve_row1(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if (step_no+1) as f64 * step > x_end {
-            x_end - step_no as f64 * step
+        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+            x_end - (x_start + step_no as f64 * step)
         } else {
             step
         };
@@ -1109,10 +1109,10 @@ fn solve_row1(
         // Critical validation after ROW1 update
         validate_finite_tensor(&y_next, "state after ROW1 update (NaN/Inf)")?;
 
-        x = if (step_no + 1) as f64 * step > x_end {
+        x = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end
         } else {
-            (step_no + 1) as f64 * step
+            x_start + (step_no + 1) as f64 * step
         };
         validate_finite_scalar(x, "ROW1 updated integration variable")?;
 
