@@ -445,7 +445,7 @@ fn solve_euler(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+        let current_step = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end - (x_start + step_no as f64 * step)
         } else {
             step
@@ -499,7 +499,7 @@ fn solve_euler(
             warned_large_norm = true;
         }
 
-        let step_count = step_no+1;
+        let step_count = step_no + 1;
         if !warned_many_steps && step_count >= 100_000 {
             warn!(
                 "Euler: reached {} steps; consider increasing step size or switching to a higher-order solver",
@@ -541,7 +541,7 @@ fn solve_rk4(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+        let current_step = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end - (x_start + step_no as f64 * step)
         } else {
             step
@@ -668,7 +668,7 @@ fn solve_implicit_euler(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+        let current_step = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end - (x_start + step_no as f64 * step)
         } else {
             step
@@ -769,7 +769,7 @@ fn solve_glrk4(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+        let current_step = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end - (x_start + step_no as f64 * step)
         } else {
             step
@@ -1167,7 +1167,7 @@ fn solve_row1(
 
     let n_steps = ((x_end - x_start) / step).ceil() as usize;
     for step_no in 0..n_steps {
-        let current_step = if x_start + (step_no+1) as f64 * step > x_end {
+        let current_step = if x_start + (step_no + 1) as f64 * step > x_end {
             x_end - (x_start + step_no as f64 * step)
         } else {
             step
