@@ -162,6 +162,8 @@ fn main() -> anyhow::Result<()> {
 **Example 2:** Trace the derivative function directly in Rust
 
 You can also define and trace the derivative function in Rust using `CModule::create_by_tracing`.
+Here we trace the undamped Duffing oscillator `y0'' = y0 - y0^3`, written as a first-order
+system `y0' = y1`, `y1' = y0 - y0^3`:
 
 ```rust
 use mini_ode::Solver;
@@ -169,22 +171,26 @@ use tch::{Tensor, CModule};
 
 fn main() -> anyhow::Result<()> {
     // Initial value for tracing
-    let y0 = Tensor::from_slice(&[1.0f64, 0.0]);
+    let y0 = Tensor::from_slice(&[1f64, 0f64]);
 
     // Define the derivative function closure
     let mut closure = |inputs: &[Tensor]| {
-        let x = &inputs[0];
+        let _x = &inputs[0];
         let y = &inputs[1];
-        let flipped = y.flip(0);
-        let dy = &flipped - &(&flipped.pow_tensor_scalar(3.0) * Tensor::from_slice(&[0.0, 1.0]));
-        vec![dy]
+        let y0 = y.get(0);
+        let y1 = y.get(1);
+
+        let dy0 = y1;
+        let dy1 = &y0 - &y0.pow_tensor_scalar(3.0);
+
+        vec![Tensor::stack(&[dy0, dy1], 0)]
     };
 
     // Trace the model directly in Rust
     let model = CModule::create_by_tracing(
         "ode_fn",
         "forward",
-        &[Tensor::from(0.0), y0.shallow_clone()],
+        &[Tensor::from(0.0f64), y0.shallow_clone()],
         &mut closure,
     )?;
 
