@@ -1,4 +1,4 @@
-use crate::optimizers::derivative_tensors_123;
+use crate::utils::differentiation::derivative_tensors_123;
 use tch::{IndexOp, Tensor};
 
 #[test]

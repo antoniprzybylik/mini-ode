@@ -1,4 +1,4 @@
-use crate::optimizers::gradient_and_hessian;
+use crate::utils::differentiation::gradient_and_hessian;
 use tch::{IndexOp, Tensor};
 
 #[test]

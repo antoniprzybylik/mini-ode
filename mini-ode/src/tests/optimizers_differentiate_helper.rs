@@ -1,4 +1,4 @@
-use crate::optimizers::differentiate;
+use crate::utils::differentiation::differentiate;
 use tch::{IndexOp, Tensor};
 
 #[test]

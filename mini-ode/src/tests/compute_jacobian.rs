@@ -1,4 +1,4 @@
-use crate::compute_jacobian;
+use crate::utils::differentiation::compute_jacobian;
 use tch::{Device, IndexOp, Kind, Tensor};
 
 #[test]
