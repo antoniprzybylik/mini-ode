@@ -10,4 +10,12 @@ from .rust import Solver
 
 from . import optimizers
 
-__all__ = ["EulerMethodSolver", "RK4MethodSolver", "RKF45MethodSolver", "ImplicitEulerMethodSolver", "GLRK4MethodSolver", "ROW1MethodSolver", "Solver"]
+__all__ = [
+    "EulerMethodSolver",
+    "RK4MethodSolver",
+    "RKF45MethodSolver",
+    "ImplicitEulerMethodSolver",
+    "GLRK4MethodSolver",
+    "ROW1MethodSolver",
+    "Solver",
+]

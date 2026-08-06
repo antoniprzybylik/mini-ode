@@ -1,6 +1,7 @@
 import pytest
 import mini_ode
 
+
 @pytest.mark.parametrize(
     "solver, expected",
     [
@@ -39,5 +40,7 @@ def test_stability_function(solver, expected):
 def test_stability_function_rejects_positive_values():
     solver = mini_ode.EulerMethodSolver(step=0.1)
 
-    with pytest.raises(RuntimeError, match="Stability function is not defined for positive numbers"):
+    with pytest.raises(
+        RuntimeError, match="Stability function is not defined for positive numbers"
+    ):
         solver.stability_function(1.0)
