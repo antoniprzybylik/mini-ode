@@ -116,11 +116,8 @@ pub trait Optimizer: Send + Sync + fmt::Display {
     ///
     /// # Panics
     /// May panic if libtorch tensor operations fail unexpectedly (should be rare).
-    fn optimize(
-        &self,
-        function: &dyn Fn(&Tensor) -> Tensor,
-        x0: &Tensor,
-    ) -> anyhow::Result<Tensor>;
+    fn optimize(&self, function: &dyn Fn(&Tensor) -> Tensor, x0: &Tensor)
+    -> anyhow::Result<Tensor>;
 }
 
 mod newton;
