@@ -28,7 +28,7 @@ attributes = [
     "__subclasshook__",
     "solve",
     "stability_function",
-    "stability_constant"
+    "stability_radius"
 ]
 
 def test_euler_dir_attribute():

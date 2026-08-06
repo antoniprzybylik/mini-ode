@@ -202,8 +202,8 @@ impl PySolver {
                     )))
                 }
             }
-            "stability_constant" => {
-                Ok(self.0.stability_constant().into_pyobject(py)?.into())
+            "stability_radius" => {
+                Ok(self.0.stability_radius().into_pyobject(py)?.into())
             }
             _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!(
                 "'Solver' object has no attribute '{}'",
@@ -242,7 +242,7 @@ impl PySolver {
             "__subclasshook__".to_string(),
             "solve".to_string(),
             "stability_function".to_string(),
-            "stability_constant".to_string()
+            "stability_radius".to_string()
         ];
 
         // Solver specific attributes

@@ -34,8 +34,8 @@ import mini_ode
         (mini_ode.ROW1MethodSolver(step=0.1), math.inf),
     ],
 )
-def test_stability_constant(solver, expected):
-    actual = solver.stability_constant
+def test_stability_radius(solver, expected):
+    actual = solver.stability_radius
 
     if math.isinf(expected):
         assert math.isinf(actual)
