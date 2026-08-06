@@ -4,6 +4,15 @@ This documents the main changes in the `mini-ode` project.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-08-06
+### Added
+- Test for warnings policy.
+- Improved docstrings for the `Solver` and the optimizers module.
+
+### Changed
+- Renamed `stability_constant` to `stability_radius` in the Python interface.
+- Big refactoring across the codebase.
+- Applied code formatting (`cargo fmt`, general formatting cleanup).
 
 ## [0.1.5] - 2026-07-23
 ### Added

@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Antoni Michał Przybylik <antoni@taon.io>"]
 license = "GPL-2.0"
 repository = "https://github.com/antoniprzybylik/mini-ode"
